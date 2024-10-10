@@ -144,7 +144,7 @@ class ARK():
         if filesize < 0:
             raise TypeError('file size is negative, somehow...')
         
-        metadata_size = tea.get_xxtea_phdr_size(filesize - self.header['metadata_offset'])
+        metadata_size = tea.get_phdr_size(filesize - self.header['metadata_offset'])
         # print(f'metadata size: {metadata_size}')
         raw_metadata_size = self.header["file_count"] * sum(FILE_METADATA_MAP.values())
         # print(f'raw metadata size: {raw_metadata_size}')
@@ -154,7 +154,7 @@ class ARK():
         metadata = file.read(metadata_size)
         
         # print(f'metadata: {int.from_bytes(metadata, 'little')}')
-        metadata = tea.xxtea_decrypt(metadata, metadata_size // 4, self.KEY)
+        metadata = tea.decrypt(metadata, metadata_size // 4, self.KEY)
         
         raw_metadata = self._decompresser.decompress(metadata, raw_metadata_size)
 
@@ -203,7 +203,7 @@ class ARK():
         file_data = file.read(metadata['encrypted_nbytes'] if metadata['encrypted_nbytes'] else metadata['compressed_size'])
 
         if (metadata['encrypted_nbytes']) != 0:
-            file_data = tea.xxtea_decrypt(file_data, metadata['encrypted_nbytes'] // 4, self.KEY)
+            file_data = tea.decrypt(file_data, metadata['encrypted_nbytes'] // 4, self.KEY)
         
         if (metadata['compressed_size'] != metadata['original_filesize']):
             file_data = self._decompresser.decompress(file_data, metadata['original_filesize'])
