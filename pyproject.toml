@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "luna-kit"
+authors = [
+  { name="ego-lay-atman-bay" },
+]
+description = " Read ark files in the My Little Pony Gameloft game"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+  "rich",
+  "zstandard",
+]
+dynamic = ["version"]
+
+[project.urls]
+"Homepage" = "https://github.com/ego-lay-atman-bay/luna-kit"
+"Bug Tracker" = "https://github.com/ego-lay-atman-bay/luna-kit/issues"
+"Documentation" = "https://ego-lay-atman-bay.github.io/luna-kit/"
+
+[tool.setuptools.dynamic]
+version = { attr = "luna_kit.__version__" }
+
+[tool.setuptools.packages.find]
+include = ["luna_kit"]
