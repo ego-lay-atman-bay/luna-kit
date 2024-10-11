@@ -23,6 +23,7 @@ class Header():
     file_count: dcs.U32 = 0
     metadata_offset: dcs.U32 = 0
     ark_version: dcs.U32 = 0
+    unknown: Annotated[bytes, 20] = b''
 
 HEADER_FORMAT = "3I"
 
