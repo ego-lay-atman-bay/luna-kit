@@ -1,4 +1,7 @@
-import os, sys, argparse
+import argparse
+import os
+import sys
+from glob import glob
 
 from .ark import ARK
 from .console import console
@@ -27,6 +30,13 @@ if __name__ == "__main__":
     )
     
     ark_parser.add_argument(
+        '-f', '--separate-folders',
+        dest = 'separate_folders',
+        help = 'Output each .ark file in separate folders',
+        action = 'store_true',
+    )
+    
+    ark_parser.add_argument(
         '-o', '--output',
         dest = 'output',
         help = 'output directory for .ark file(s)',
@@ -41,14 +51,23 @@ if __name__ == "__main__":
     if args.command == 'ark':
         output = './'
         
+        files = []
+        for pattern in args.files:
+            files += glob(pattern)
+        
         if args.output:
             output = args.output
-        elif len(args.files) == 1:
+        elif len(files) == 1:
             output = os.path.splitext(os.path.basename(args.files[0]))[0]
         
-        if len(args.files) == 1:
+        if len(files) == 1:
             ark_file = ARK(args.files[0], output = output)
         else:
-            for filename in args.files:
+            for filename in files:
                 filename: str
-                ark_file = ARK(filename, output = os.path.join(output, os.path.splitext(os.path.basename(filename))[0]))
+                if args.separate_folders:
+                    path = os.path.join(output, os.path.splitext(os.path.basename(filename))[0])
+                else:
+                    path = output
+                
+                ark_file = ARK(filename, output = path)
