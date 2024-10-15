@@ -73,8 +73,8 @@ class TexAtlas():
                     atlas_image.crop((
                         image_data['x'],
                         image_data['y'],
-                        image_data['x'] + image_data['width'],
-                        image_data['y'] + image_data['height'],
+                        image_data['x'] + image_data['width'] - 1,
+                        image_data['y'] + image_data['height'] - 1,
                     )),
                     dir = posix_path(atlas_file).removesuffix('/' + posix_path(image_data['atlas']))
                 )
