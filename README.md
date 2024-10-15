@@ -11,21 +11,23 @@ pip install git+https://github.com/ego-lay-atman-bay/luna-kit
 You can then use Luna Kit by using
 
 ```
-python -m luna_kit -h
+luna-kit -h
 ```
+
+If that doesn't work, use `python -m luna_kit` instead of `luna-kit` (if you're on windows, you can use `py` instead of `python`).
 
 ## Extracting `.ark` files
 
 Extract `.ark` files with this command
 
 ```
-python -m luna_kit ark "path/to/ark.ark" -o "output/folder"
+luna-kit ark "path/to/ark.ark" -o "output/folder"
 ```
 
 This also accepts multiple `.ark` files.
 
 ```
-python -m luna_kit ark "path/to/ark.ark" "another_ark.ark" -o "output"
+luna-kit ark "path/to/ark.ark" "another_ark.ark" -o "output"
 ```
 
 ## Split `.texatlas` files
@@ -33,7 +35,7 @@ python -m luna_kit ark "path/to/ark.ark" "another_ark.ark" -o "output"
 You can split `.texatlas` files using
 
 ```
-python -m luna_kit atlas path/to/file.texatlas -o output
+luna-kit atlas path/to/file.texatlas -o output
 ```
 
 # Credits
