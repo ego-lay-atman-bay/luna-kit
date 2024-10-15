@@ -9,7 +9,7 @@ from .console import console
 
 console.quiet = False
 
-if __name__ == "__main__":
+def main():
     arg_parser = argparse.ArgumentParser(
         description = 'Decrypt .ark files from My Little Pony Magic Princess (the Gameloft game).',
     )
@@ -140,3 +140,6 @@ if __name__ == "__main__":
             os.makedirs(os.path.dirname(filename), exist_ok = True)
             
             image.image.save(filename)
+
+if __name__ == "__main__":
+    main()

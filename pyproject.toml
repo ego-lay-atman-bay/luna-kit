@@ -20,6 +20,7 @@ dependencies = [
   "rich",
   "zstandard",
   "dataclasses-struct",
+  "Pillow",
 ]
 dynamic = ["version"]
 
@@ -33,3 +34,6 @@ version = { attr = "luna_kit.__version__" }
 
 [tool.setuptools.packages.find]
 include = ["luna_kit"]
+
+[project.scripts]
+luna-kit = 'luna_kit.__main__:main'
