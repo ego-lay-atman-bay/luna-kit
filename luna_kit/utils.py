@@ -25,3 +25,10 @@ def is_binary_file(file: IO):
 
 def is_text_file(file: IO):
     return isinstance(file, io.TextIOBase)
+
+
+def strToInt(value: str, default = 0):
+    try:
+        return int(float(value))
+    except:
+        return default

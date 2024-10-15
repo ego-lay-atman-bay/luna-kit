@@ -3,7 +3,8 @@ import os
 import sys
 from glob import glob
 
-from .ark import ARK
+from rich.progress import track
+
 from .console import console
 
 console.quiet = False
@@ -18,6 +19,7 @@ if __name__ == "__main__":
         dest = 'command',
     )
     
+    # ark_parser
     ark_parser = subparsers.add_parser(
         'ark',
         help = 'Extract .ark files',
@@ -42,6 +44,37 @@ if __name__ == "__main__":
         help = 'output directory for .ark file(s)',
     )
     
+    # atlas_parser
+    atlas_parser = subparsers.add_parser(
+        'atlas',
+        help = 'Extract .texatlas files.',
+    )
+    
+    atlas_parser.add_argument(
+        'file',
+        help = 'input .texatlas file',
+    )
+    
+    atlas_parser.add_argument(
+        '-s', '--search-folders',
+        dest = 'search_folders',
+        nargs = '+',
+        help = 'additional folders to look for the atlas images in. This defaults to the current working directory.',
+    )
+    
+    atlas_parser.add_argument(
+        '-ds', '--disable-smart-search',
+        dest = 'smart_search',
+        action = 'store_false',
+        help = 'Smart search searches the folders that the .texatlas file is located in to find the atlas image. Disabling this will only search the current working directory (or additional search paths).',
+    )
+    
+    atlas_parser.add_argument(
+        '-o', '--output',
+        dest = 'output',
+        help = 'Output folder to save images to. If omitted, the files will save to their location that they would be in the folder the .texatlas file was in.',
+    )
+    
     if len(sys.argv[1:]) < 1:
         arg_parser.print_help()
         sys.exit()
@@ -49,6 +82,8 @@ if __name__ == "__main__":
     args = arg_parser.parse_args()
     
     if args.command == 'ark':
+        from .ark import ARK
+        
         output = './'
         
         files = []
@@ -71,3 +106,37 @@ if __name__ == "__main__":
                     path = output
                 
                 ark_file = ARK(filename, output = path)
+
+    elif args.command == 'atlas':
+        from .texatlas import TexAtlas
+        
+        file: str = args.file
+        
+        if not os.path.isfile(file):
+            raise FileNotFoundError(f'file "{file}" does not exist or is a directory.')
+        
+        search_folders: list[str] = args.search_folders
+        if search_folders and len(search_folders) == 0:
+            search_folders.append('.')
+
+        atlas = TexAtlas(
+            file,
+            search_folders = search_folders,
+            smart_search = args.smart_search,
+        )
+        
+        for image in track(
+            atlas.images,
+            'saving...',
+            console = console,
+        ):
+            console.print(image.filename)
+            if not args.output:
+                dir = image.dir
+            else:
+                dir = args.output
+            
+            filename = os.path.join(dir, image.filename)
+            os.makedirs(os.path.dirname(filename), exist_ok = True)
+            
+            image.image.save(filename)

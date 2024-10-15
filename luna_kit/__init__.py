@@ -3,3 +3,5 @@ __author__ = "ego-lay-atman-bay"
 
 from .ark import ARK, ARKFile
 from . import enums
+
+from .texatlas import TexAtlas
