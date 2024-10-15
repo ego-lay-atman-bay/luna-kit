@@ -1,3 +1,5 @@
 rich==13.9.2
 zstandard==0.23.0
-dataclasses-struct
+dataclasses-struct=0.8.2
+# git+https://github.com/hugeBlack/pyvgmstream
+pillow==11.0.0
