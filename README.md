@@ -30,6 +30,12 @@ This also accepts multiple `.ark` files.
 luna-kit ark "path/to/ark.ark" "another_ark.ark" -o "output"
 ```
 
+The filename can also be a glob pattern
+
+```
+luna-kit ark "path/to/*.ark" -o "output"
+```
+
 ## Split `.texatlas` files
 
 You can split `.texatlas` files using
