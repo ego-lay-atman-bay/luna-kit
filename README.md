@@ -1,5 +1,5 @@
 # Luna Kit
-This is a toolkit that is used for reading files from the My Little Pony Magic Princess Gameloft game. Currently it can only extract `.ark` files, but later may add more functionality.
+This is a toolkit that is used for reading files from the My Little Pony Magic Princess Gameloft game.
 
 # Installation
 You can install Luna Kit by first making sure [python](https://python.org) is installed, then run.
@@ -63,6 +63,6 @@ luna-kit loc "english.loc"
 And this will save `english.json`. Note that some languages, like chinese, will have special characters encoded, so you'll probably have to open the json file with some json parser to get the special characters.
 
 # Credits
-This project is based off of [Celestia's Ark](https://gist.github.com/liamwhite/ba39ce769424b53a5505), in fact, a lot of the `.ark` file reading code was taken from Celestia's Ark (just rewritten in python).
+[ark.py](https://github.com/ego-lay-atman-bay/luna-kit/blob/main/luna_kit/ark.py) is based off of [Celestia's ARK](https://gist.github.com/liamwhite/ba39ce769424b53a5505), in fact, most of the file reading code was taken from Celestia's ARK (just rewritten in python).
 
-The major inspiration for creating this, was to eliminate the compile step in Celestia's Ark, as well as providing an easy to use api. I called this "Luna Kit", because I'm planning on doing more than just extracting `.ark` file (maybe writing to them?).
+The major inspiration for creating this, was to eliminate the compilation step in Celestia's ARK, as well as providing an easy to use api. I called this "Luna Kit", because it's a toolkit for reading (and writing some) files inside My Little Pony Magic Princess, including `.ark` files, splitting `.texatlas` files, converting `.loc` files to json, etc.
