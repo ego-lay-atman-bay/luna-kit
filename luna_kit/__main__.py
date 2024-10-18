@@ -51,8 +51,9 @@ def main():
     )
     
     atlas_parser.add_argument(
-        'file',
-        help = 'input .texatlas file',
+        'files',
+        nargs = '+',
+        help = 'input .texatlas file(s)',
     )
     
     atlas_parser.add_argument(
@@ -88,7 +89,7 @@ def main():
         
         files = []
         for pattern in args.files:
-            files += glob(pattern)
+            files.extend(glob(pattern))
         
         if args.output:
             output = args.output
@@ -108,38 +109,50 @@ def main():
                 ark_file = ARK(filename, output = path)
 
     elif args.command == 'atlas':
+        console.print(args)
+        
         from .texatlas import TexAtlas
         
-        file: str = args.file
+        files: list[str] = []
         
-        if not os.path.isfile(file):
-            raise FileNotFoundError(f'file "{file}" does not exist or is a directory.')
+        console.print('before', files)
+        console.print('files arg', args.files)
+        
+        for pattern in args.files:
+            files.extend(glob(pattern))
         
         search_folders: list[str] = args.search_folders
         if search_folders and len(search_folders) == 0:
             search_folders.append('.')
-
-        atlas = TexAtlas(
-            file,
-            search_folders = search_folders,
-            smart_search = args.smart_search,
-        )
         
-        for image in track(
-            atlas.images,
-            'saving...',
-            console = console,
-        ):
-            console.print(image.filename)
-            if not args.output:
-                dir = image.dir
-            else:
-                dir = args.output
+        console.print(files)
+        
+        for file in files:
+            if not os.path.isfile(file):
+                raise FileNotFoundError(f'file "{file}" does not exist or is a directory.')
             
-            filename = os.path.join(dir, image.filename)
-            os.makedirs(os.path.dirname(filename), exist_ok = True)
+
+            atlas = TexAtlas(
+                file,
+                search_folders = search_folders,
+                smart_search = args.smart_search,
+            )
             
-            image.image.save(filename)
+            for image in track(
+                atlas.images,
+                'saving...',
+                console = console,
+            ):
+                console.print(image.filename)
+                if not args.output:
+                    dir = image.dir
+                else:
+                    dir = args.output
+                
+                filename = os.path.join(dir, image.filename)
+                os.makedirs(os.path.dirname(filename), exist_ok = True)
+                
+                image.image.save(filename)
 
 if __name__ == "__main__":
     main()
