@@ -67,7 +67,7 @@ class LocalizationFile():
         )
     
     def __read_key(self, file: BinaryIO):
-        """Read the string key from the file. This assumes that the current position in the file object is on the key length, followed by 2 padding bytes.
+        """Read the string key from the file. This assumes that the current position in the file object is on the key length.
 
         Args:
             file (BinaryIO): File-like object in binary read mode.
@@ -76,18 +76,18 @@ class LocalizationFile():
             str: string key
         """
         length = struct.unpack(
-            'H',
-            file.read(2),
+            'I',
+            file.read(4),
         )[0]
         
-        file.read(2) # padding
+        # file.read(2) # padding
         
         key = file.read(length)
         
         return key.decode()
     
     def __read_value(self, file: BinaryIO):
-        """Read the string from the file. This assumes that the current position in the file object is on the string length, followed by 2 padding bytes. The string is encoded with utf-16, taking 2 bytes per character, with the length being the string length (not the byte length, so byte length = length * 2).
+        """Read the string from the file. This assumes that the current position in the file object is on the string length. The string is encoded with utf-16, taking 2 bytes per character, with the length being the string length (not the byte length, so byte length = length * 2).
 
         Args:
             file (BinaryIO): File-like object in binary read mode.
@@ -96,11 +96,9 @@ class LocalizationFile():
             str: string
         """
         length = struct.unpack(
-            'H',
-            file.read(2),
+            'I',
+            file.read(4),
         )[0]
-        
-        file.read(2) # padding
         
         value = file.read(length * 2)
         
