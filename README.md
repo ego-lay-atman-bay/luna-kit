@@ -1,14 +1,18 @@
 # Luna Kit
 This is a toolkit that is used for reading files from the My Little Pony Magic Princess Gameloft game. Currently it can only extract `.ark` files, but later may add more functionality.
 
-# Usage
+# Installation
 You can install Luna Kit by first making sure [python](https://python.org) is installed, then run.
 
 ```
 pip install --upgrade git+https://github.com/ego-lay-atman-bay/luna-kit
 ```
 
-You can then use Luna Kit by using
+To update, run the installation command again.
+
+# Usage
+
+You can use Luna Kit by running
 
 ```
 luna-kit -h
