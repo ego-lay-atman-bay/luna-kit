@@ -1,7 +1,7 @@
 __version__ = "1.0.0"
 __author__ = "ego-lay-atman-bay"
 
-from .ark import ARK, ARKFile
 from . import enums
-
+from .ark import ARK, ARKFile
+from .loc import LocalizationFile
 from .texatlas import TexAtlas

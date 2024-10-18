@@ -44,6 +44,16 @@ You can split `.texatlas` files using
 luna-kit atlas path/to/file.texatlas -o output
 ```
 
+## Convert `.loc` files to json
+
+`.loc` files are localization files that contain every string used in the game in each language. These can be converted to a json file just by running
+
+```
+luna-kit loc "english.loc"
+```
+
+And this will save `english.json`. Note that some languages, like chinese, will have special characters encoded, so you'll probably have to open the json file with some json parser to get the special characters.
+
 # Credits
 This project is based off of [Celestia's Ark](https://gist.github.com/liamwhite/ba39ce769424b53a5505), in fact, a lot of the `.ark` file reading code was taken from Celestia's Ark (just rewritten in python).
 
