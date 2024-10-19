@@ -21,6 +21,7 @@ dependencies = [
   "zstandard",
   "dataclasses-struct",
   "Pillow",
+  "lxml",
 ]
 dynamic = ["version"]
 
