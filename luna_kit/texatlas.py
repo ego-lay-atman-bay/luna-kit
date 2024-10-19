@@ -6,7 +6,8 @@ import pathlib
 
 from PIL import Image
 
-from .utils import is_binary_file, is_text_file, strToInt, posix_path
+from .file_utils import is_binary_file, is_text_file
+from .utils import posix_path, strToInt
 
 
 class TexAtlas():
