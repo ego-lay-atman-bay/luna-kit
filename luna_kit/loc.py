@@ -8,7 +8,7 @@ from typing import Annotated, BinaryIO
 import dataclasses_struct as dcs
 
 from . import file_utils
-from .utils import is_binary_file, is_text_file
+from .file_utils import is_binary_file, is_text_file
 
 
 @dcs.dataclass()

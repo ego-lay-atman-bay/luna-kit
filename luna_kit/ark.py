@@ -16,7 +16,8 @@ from rich.progress import Progress, track
 
 from . import enums, types, xxtea
 from .console import console
-from .utils import is_binary_file, is_text_file, posix_path, trailing_slash
+from .file_utils import is_binary_file, is_text_file
+from .utils import posix_path, trailing_slash
 
 
 @dcs.dataclass()
