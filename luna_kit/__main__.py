@@ -76,6 +76,13 @@ def main():
         help = 'Output folder to save images to. If omitted, the files will save to their location that they would be in the folder the .texatlas file was in.',
     )
     
+    atlas_parser.add_argument(
+        '-e', '--override-existing',
+        dest = 'override_existing',
+        action = 'store_true',
+        help = "By default, Luna Kit will not override existing files, but this option can turn that off.",
+    )
+    
     
     # loc_parser
     loc_parser = subparsers.add_parser(
@@ -171,6 +178,8 @@ def main():
                 filename = os.path.join(dir, image.filename)
                 os.makedirs(os.path.dirname(filename), exist_ok = True)
                 
+                if not args.override_existing and os.path.exists(filename):
+                    continue
                 image.image.save(filename)
     
     elif args.command == 'loc':
