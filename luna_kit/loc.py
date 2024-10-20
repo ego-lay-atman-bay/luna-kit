@@ -53,6 +53,8 @@ class LocalizationFile():
         Args:
             filename (str | None, optional): Filename to save to. Defaults to original filename with .json file extension.
         """
+        kwargs.setdefault("ensure_ascii", False)
+        
         if filename == None:
             filename = os.path.splitext(self.filename)[0] + '.json'
         
