@@ -108,6 +108,8 @@ class ARK():
         else:
             raise TypeError('cannot open file')
         
+        self.files = []
+        
         with context_manager as open_file:
             open_file.seek(0)
             
