@@ -44,6 +44,13 @@ def main():
         help = 'output directory for .ark file(s)',
     )
     
+    ark_parser.add_argument(
+        '-i', '--ignore-errors',
+        dest = 'ignore_errors',
+        action = 'store_true',
+        help = 'ignore errors',
+    )
+    
     # atlas_parser
     atlas_parser = subparsers.add_parser(
         'atlas',
@@ -130,7 +137,7 @@ def main():
             output = os.path.splitext(os.path.basename(args.files[0]))[0]
         
         if len(files) == 1:
-            ark_file = ARK(args.files[0], output = output)
+            ark_file = ARK(args.files[0], output = output, ignore_errors = args.ignore_errors)
         else:
             for filename in files:
                 filename: str
@@ -139,7 +146,7 @@ def main():
                 else:
                     path = output
                 
-                ark_file = ARK(filename, output = path)
+                ark_file = ARK(filename, output = path, ignore_errors = args.ignore_errors)
 
     elif args.command == 'atlas':
         from .texatlas import TexAtlas

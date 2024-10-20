@@ -68,6 +68,7 @@ class ARK():
         self,
         file: str | bytes | bytearray | BinaryIO | None = None,
         output: str | None = None,
+        ignore_errors: bool = False,
     ) -> None:
         """Extract `.ark` files.
 
@@ -80,12 +81,17 @@ class ARK():
         
         
         if file != None:
-            self.read(file, output)
+            self.read(
+                file,
+                output,
+                ignore_errors,
+            )
     
     def read(
         self,
         file: str | bytes | bytearray | BinaryIO,
         output: str | None = None,
+        ignore_errors: bool = False,
     ):
         """Extract `.ark` files.
 
@@ -119,6 +125,8 @@ class ARK():
             self.metadata = self._get_metadata(open_file)
             # print(self.metadata)
             
+            failed = []
+            
             for file_metadata in track(
                 self.metadata,
                 console = console,
@@ -126,11 +134,22 @@ class ARK():
             ):
                 filename = posix_path(os.path.join(decode(file_metadata.pathname), decode(file_metadata.filename)))
                 console.print(f'extracting [yellow]{filename}[/yellow]')
-                ark_file = self._get_file_data(file_metadata, open_file)
-                self.files.append(ark_file)
-                
-                if output:
-                    ark_file.save(os.path.join(output, ark_file.fullpath))
+                try:
+                    ark_file = self._get_file_data(file_metadata, open_file)
+                    self.files.append(ark_file)
+                    
+                    if output:
+                        ark_file.save(os.path.join(output, ark_file.fullpath))
+                except Exception as e:
+                    e.add_note(filename)
+                    failed.append(filename)
+                    if not ignore_errors:
+                        raise e
+            
+            if len(failed):
+                console.print('\nFailed to extract:')
+                for filename in failed:
+                    console.print(f'[yellow]{filename}[/yellow]')
     
     def write(self, file: str | bytes | bytearray | BinaryIO):
         if isinstance(file, str):
