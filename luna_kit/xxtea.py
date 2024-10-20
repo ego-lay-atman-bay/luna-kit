@@ -1,3 +1,4 @@
+import struct
 from ctypes import *
 from ctypes import c_uint32
 from typing import Annotated
@@ -12,10 +13,10 @@ def get_phdr_size(phdr_off: int):
 
 
 def decrypt(src: bytes | bytearray, n: int, key: Annotated[list[int], 4]):
-    v = [
-        c_uint32(int.from_bytes(src[x * len(src) // n : (x + 1)* len(src) // n], 'little'))
-        for x in range(n)
-    ]
+    v = [c_uint(x) for x in struct.unpack(
+        f'{n}I',
+        src,
+    )]
 
     key: list[c_uint32] = [c_uint32(k) for k in key]
 
