@@ -23,3 +23,9 @@ def strToInt(value: str, default = 0):
         return int(float(value))
     except:
         return default
+
+def strToFloat(value: str, default = 0.0):
+    try:
+        return float(value)
+    except:
+        return default
