@@ -1,7 +1,4 @@
-import contextlib
-import io
-import os
-from itertools import zip_longest
+from typing import IO
 
 from lxml import etree
 
@@ -11,7 +8,7 @@ from ._gameobjects import GameObject
 class GameObjectData():
     categories: dict
     
-    def __init__(self, file) -> None:
+    def __init__(self, file: str | IO) -> None:
         self.categories = {}
         
         tree = etree.parse(file)
