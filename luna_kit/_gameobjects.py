@@ -1,8 +1,7 @@
-import functools
 from collections.abc import Callable, Mapping
 from copy import copy
 from itertools import zip_longest
-from typing import Annotated, Any, Literal, Type, TypedDict
+from typing import Any, Literal, TypedDict
 
 from lxml import etree
 
@@ -233,6 +232,79 @@ class PonyObject(GameObject):
         },
     )
     
+    shop: dict[Literal[
+        'Icon',
+        'OffsetX',
+        'OffsetY',
+        'Scale',
+        'CanBeAssign',
+    ], str | float | bool] = GameObjectProperty(
+            tag = 'Shop',
+            type = {
+                'Icon': GameObjectProperty(
+                    attrib = 'Icon',
+                    type = 'str',
+                ),
+                'OffsetX': GameObjectProperty(
+                    attrib = 'OffsetX',
+                    type = 'float',
+                ),
+                'OffsetY': GameObjectProperty(
+                    attrib = 'OffsetY',
+                    type = 'float',
+                ),
+                'Scale': GameObjectProperty(
+                    attrib = 'Scale',
+                    type = 'float',
+                ),
+                'CanBeAssign': GameObjectProperty(
+                    attrib = 'CanBeAssign',
+                    type = 'bool',
+                ),
+            },
+        )
+    
+    ai: dict[Literal['special_ai', 'max_level'], int | str] = GameObjectProperty(
+        tag = 'AI',
+        type = {
+            'special_ai': GameObjectProperty(
+                attrib = 'Special_AI',
+                type = 'int',
+            ),
+            'max_level': GameObjectProperty(
+                attrib = 'Max_Level',
+                type = 'str',
+            ),
+        }
+    )
+    
+    tracking: dict[Literal['id', 'arrival_message'], int | str] = GameObjectProperty(
+        tag = 'Tracking',
+        type = {
+            'id': GameObjectProperty(
+                attrib = 'TrackingID',
+                type = 'int',
+            ),
+            'arrival_message': GameObjectProperty(
+                attrib = 'ArrivalPush',
+                type = 'str',
+            )
+        }
+    )
+    
+    arrival_xp: int = GameObjectProperty(
+        tag = 'OnArrive',
+        type = 'int',
+        attrib = 'EarnXP',
+    )
+    
+    star_rewards: list[dict[Literal['reward', 'amount'], str | int]] = GameObjectProperty(
+        tag = 'StarRewards',
+        type = _star_rewards,
+    )
+
+
+    
     model: dict[Literal['EffectColour_B', 'Collision_Y', 'Base_Growing', 'ShadowBone', 'EffectColour_R', 'BaseFG', 'ShadowScale', 'PivotY', 'Collision_W', 'BaseBG', 'FixedZOffset', 'AutoScale', 'ScrollSpeed', 'ZOffset', 'VineID', 'EffectColour_G', 'Alpha', 'Base_Ready', 'PivotX', 'Scale', 'Scrolling', 'DefaultIsLeft', 'Rotation', 'MediumLOD', 'GridSize', 'Model', 'Foreground', 'RootBone', 'Base', 'Collision_X', 'LowLOD', 'HighLOD', 'Camera', 'Collision_Z'], str] = GameObjectProperty(
         tag = 'Model',
         type = {
@@ -375,74 +447,3 @@ class PonyObject(GameObject):
         }
     )
     
-
-    shop: dict[Literal[
-        'Icon',
-        'OffsetX',
-        'OffsetY',
-        'Scale',
-        'CanBeAssign',
-    ], str | float | bool] = GameObjectProperty(
-            tag = 'Shop',
-            type = {
-                'Icon': GameObjectProperty(
-                    attrib = 'Icon',
-                    type = 'str',
-                ),
-                'OffsetX': GameObjectProperty(
-                    attrib = 'OffsetX',
-                    type = 'float',
-                ),
-                'OffsetY': GameObjectProperty(
-                    attrib = 'OffsetY',
-                    type = 'float',
-                ),
-                'Scale': GameObjectProperty(
-                    attrib = 'Scale',
-                    type = 'float',
-                ),
-                'CanBeAssign': GameObjectProperty(
-                    attrib = 'CanBeAssign',
-                    type = 'bool',
-                ),
-            },
-        )
-    
-    ai: dict[Literal['special_ai', 'max_level'], int | str] = GameObjectProperty(
-        tag = 'AI',
-        type = {
-            'special_ai': GameObjectProperty(
-                attrib = 'Special_AI',
-                type = 'int',
-            ),
-            'max_level': GameObjectProperty(
-                attrib = 'Max_Level',
-                type = 'str',
-            ),
-        }
-    )
-    
-    tracking: dict[Literal['id', 'arrival_message'], int | str] = GameObjectProperty(
-        tag = 'Tracking',
-        type = {
-            'id': GameObjectProperty(
-                attrib = 'TrackingID',
-                type = 'int',
-            ),
-            'arrival_message': GameObjectProperty(
-                attrib = 'ArrivalPush',
-                type = 'str',
-            )
-        }
-    )
-    
-    arrival_xp: int = GameObjectProperty(
-        tag = 'OnArrive',
-        type = 'int',
-        attrib = 'EarnXP',
-    )
-    
-    star_rewards: list[dict[Literal['reward', 'amount'], str | int]] = GameObjectProperty(
-        tag = 'StarRewards',
-        type = _star_rewards,
-    )
