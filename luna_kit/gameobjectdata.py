@@ -1,15 +1,15 @@
-from typing import IO
+from typing import IO, Literal
 
 from lxml import etree
 
-from ._gameobjects import GameObject
+from ._gameobjects import GameObject, PonyObject
 
 
 class GameObjectData():
     categories: dict
     
     def __init__(self, file: str | IO) -> None:
-        self.categories = {}
+        self.categories: dict[Literal['Pony'] | str, list[GameObject | PonyObject]] = {}
         
         tree = etree.parse(file)
         

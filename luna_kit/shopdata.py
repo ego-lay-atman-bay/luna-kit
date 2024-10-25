@@ -8,7 +8,7 @@ from .utils import strToFloat, strToInt
 
 class ShopData():
     def __init__(self, file: str | IO) -> None:
-        self.categories = {}
+        self.categories: dict[str, ShopCategory] = {}
         
         tree = etree.parse(file)        
         
@@ -33,14 +33,14 @@ class ShopItem():
         task_token_id: str = "",
         quest: str = "",
     ) -> None:
-        self.id = id
-        self.unlock_value = unlock_value
-        self.cost = cost
-        self.currency_type = currency_type
-        self.sort_price = sort_price
-        self.map_zone = map_zone
-        self.task_token_id = task_token_id
-        self.quest = quest
+        self.id: str = id
+        self.unlock_value: int = unlock_value
+        self.cost: int = cost
+        self.currency_type: int = currency_type
+        self.sort_price: float = sort_price
+        self.map_zone: int | list[int] = map_zone
+        self.task_token_id: str = task_token_id
+        self.quest: str = quest
     
     @classmethod
     def from_xml(self, xml: etree._Element):
@@ -64,6 +64,7 @@ class ShopItem():
         )
 
 class ShopCategory():
+    
     def __init__(
         self,
         id: str,
@@ -74,14 +75,14 @@ class ShopCategory():
         debug_only: bool = False,
         show_inventory: bool = False,
     ) -> None:
-        self.id = id
-        self.label = label
-        self.is_visible = is_visible
-        self.icon = icon
-        self.debug_only = debug_only
-        self.show_inventory = show_inventory
+        self.id: str = id
+        self.label: str = label
+        self.is_visible: bool = is_visible
+        self.icon: str = icon
+        self.debug_only: bool = debug_only
+        self.show_inventory: bool = show_inventory
         
-        self.items = items
+        self.items: list[ShopItem] = items
         
     @classmethod
     def from_xml(cls, xml: etree._Element):
