@@ -5,19 +5,12 @@ import os
 import struct
 from typing import Annotated, BinaryIO
 
-import dataclasses_struct as dcs
-
 from . import file_utils
 from .file_utils import is_binary_file, is_text_file
 
-
-@dcs.dataclass()
-class Header():
-    magic: Annotated[bytes, 4] = bytes([0x59, 0x71, 0x00, 0x00])
-
 class LocalizationFile():
     def __init__(self, file: str | bytes | bytearray | BinaryIO) -> None:
-        self.header = Header()
+        self.string_count = 0
         self.filename = ''
         
         self.read(file)
@@ -42,7 +35,7 @@ class LocalizationFile():
         with context_manager as open_file:
             self.__read_header(open_file)
 
-            while not file_utils.is_eof(open_file):
+            for x in range(self.string_count):
                 key = self.__read_key(open_file)
                 value = self.__read_value(open_file)
                 self.strings[key] = value
@@ -64,9 +57,7 @@ class LocalizationFile():
             json.dump(self.strings, file, **kwargs)
     
     def __read_header(self, file: BinaryIO):
-        self.header = Header.from_packed(
-            file.read(dcs.get_struct_size(Header))
-        )
+        self.string_count = struct.unpack('I',file.read(4))[0]
     
     def __read_key(self, file: BinaryIO):
         """Read the string key from the file. This assumes that the current position in the file object is on the key length.
