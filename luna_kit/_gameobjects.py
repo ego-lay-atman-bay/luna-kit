@@ -1,7 +1,9 @@
 from collections.abc import Callable, Mapping
-from copy import copy
+from copy import copy, deepcopy
 from itertools import zip_longest
 from typing import Any, Literal, TypedDict
+from dataclasses import dataclass
+import functools
 
 from lxml import etree
 
@@ -13,7 +15,7 @@ from .utils import strToFloat, strToInt
 #     attrib: str
 
 
-type GameObjectType = Literal['str', 'int', 'float', 'bool'] | Callable | Mapping[str, GameObjectProperty]
+type GameObjectType = Literal['str', 'int', 'float', 'bool', 'rbool'] | Callable | Mapping[str, GameObjectProperty]
 
 def game_object_type_to_annotation(type: GameObjectType):
     result = Any
@@ -31,6 +33,8 @@ def game_object_type_to_annotation(type: GameObjectType):
         match type:
             case 'bool':
                 result = bool
+            case 'rbool':
+                result = bool
             case 'int':
                 result = int
             case 'float':
@@ -47,8 +51,6 @@ class GameObject():
     CATEGORY = ''
     PROPERTIES: Mapping[str, 'GameObjectProperty'] = {}
     OBJECTS: 'Mapping[str, GameObject]' = {}
-
-    __annotations__: Mapping[str, 'Any | _GameObjectPropertyType']
     
     @classmethod
     def from_category(cls: 'GameObject', xml: etree._Element, category: str = None):
@@ -71,22 +73,44 @@ class GameObject():
         cls.OBJECTS[category] = object
     
     def __init__(self, xml: etree._Element) -> None:
+        for prop, value in self.PROPERTIES.items():
+            if not isinstance(value, GameObjectProperty):
+                continue
+            
+            default = deepcopy(value.default)
+            
+            if default is None:
+                match value.type:
+                    case 'bool':
+                        default = False
+                    case 'rbool':
+                        default = True
+                    case 'float':
+                        default = 0.0
+                    case 'int':
+                        default = 0
+                    case 'str':
+                        default = ''
+            
+            self.__setattr__(prop, default)
+        
+        self._set_xml_data(xml)
+        
         for element in xml:
             self._set_xml_data(element)
     
     def _set_xml_data(self, xml: etree._Element):
-        prop = None
+        props = {}
         for key, prop_info in self.PROPERTIES.items():
             if prop_info.tag == xml.tag:
-                prop = key
-                break
+                props[key] = prop_info
         
-        if prop == None:
+        if props == {}:
             return
         
-        value = self._get_element_value(xml, prop_info)
-        
-        self.__setattr__(prop, value)
+        for prop, prop_info in props.items():
+            value = self._get_element_value(xml, prop_info)
+            self.__setattr__(prop, value)
     
     def _get_element_value(self, element: etree._Element, prop_info: 'GameObjectProperty'):
         value = None
@@ -103,6 +127,8 @@ class GameObject():
             match prop_info.type:
                 case 'bool':
                     value = bool(strToInt(value or 0))
+                case 'rbool':
+                    value = not bool(strToInt(value or 0))
                 case 'int':
                     value = strToInt(value or 0)
                 case 'float':
@@ -115,16 +141,12 @@ class GameObject():
 def make_type(cls):
     return cls()
 
+@dataclass
 class GameObjectProperty():
-    def __init__(
-        self,
-        type: GameObjectType,
-        attrib: str = None,
-        tag: str = None,
-    ) -> None:
-        self.type = type
-        self.attrib = attrib
-        self.tag = tag
+    type: GameObjectType = None
+    attrib: str = None
+    tag: str = None
+    default: Any = None
 
 def register_game_object[T](cls: T) -> T:
     GameObject.register_object(cls)
@@ -138,9 +160,11 @@ def register_game_object[T](cls: T) -> T:
             continue
         
         cls.PROPERTIES[attr] = value
+        
         setattr(cls, attr, None)
         
         cls.__annotations__[attr] = game_object_type_to_annotation(value.type)
+    
     
     return cls
 
@@ -159,6 +183,7 @@ class PonyObject(GameObject):
             ids, amounts,
             fillvalue = etree.Element('Item', value = ''),
         ):
+            
             reward = {
                 'reward': id.get('Value'),
                 'amount': strToInt(amount.get('Value')),
@@ -167,6 +192,14 @@ class PonyObject(GameObject):
             star_rewards.append(reward)
         
         return star_rewards
+    
+    
+
+    id: str = GameObjectProperty(
+        tag = 'GameObject',
+        type = 'str',
+        attrib = 'ID',
+    )
     
     name: str = GameObjectProperty(
         tag = 'Name',
@@ -178,13 +211,13 @@ class PonyObject(GameObject):
         type = 'str',
         attrib = 'Unlocal',
     )
-    minigame: dict[Literal[
+    minigames: dict[Literal[
         'EXP_Rank',
-        'CanPlayMineCart',
-        'NoWings',
-        'PlayActionSkipAgainCost',
-        'LockedGames',
-        'TimeBetweenPlayActions',
+        'can_play_minecart',
+        'no_wings',
+        'skip_cost',
+        'locked_games',
+        'time_between_play_actions',
     ], int | bool | str] = GameObjectProperty(
         tag = 'Minigames',
         type = {
@@ -192,23 +225,23 @@ class PonyObject(GameObject):
                 type = 'int',
                 attrib = 'EXP_Rank'
             ),
-            'CanPlayMineCart': GameObjectProperty(
+            'can_play_minecart': GameObjectProperty(
                 type = 'bool',
                 attrib = 'CanPlayMineCart',
             ),
-            'NoWings': GameObjectProperty(
+            'no_wings': GameObjectProperty(
                 type = 'bool',
                 attrib = 'NoWings',
             ),
-            'PlayActionSkipAgainCost': GameObjectProperty(
+            'skip_cost': GameObjectProperty(
                 type = 'int',
                 attrib = 'PlayActionSkipAgainCost',
             ),
-            'LockedGames': GameObjectProperty(
-                type = 'str',
+            'locked_games': GameObjectProperty(
+                type = lambda xml: [game for game in xml.get('LockedGames', '').split(',') if game],
                 attrib = 'LockedGames',
             ),
-            'TimeBetweenPlayActions': GameObjectProperty(
+            'time_between_play_actions': GameObjectProperty(
                 type = 'int',
                 attrib = 'TimeBetweenPlayActions',
             ),
@@ -232,64 +265,63 @@ class PonyObject(GameObject):
         },
     )
     
-    shop: dict[Literal[
-        'Icon',
-        'OffsetX',
-        'OffsetY',
-        'Scale',
-        'CanBeAssign',
+    image: dict[Literal[
+        'image',
+        'offset_x',
+        'offset_y',
+        'scale',
     ], str | float | bool] = GameObjectProperty(
-            tag = 'Shop',
-            type = {
-                'Icon': GameObjectProperty(
-                    attrib = 'Icon',
-                    type = 'str',
-                ),
-                'OffsetX': GameObjectProperty(
-                    attrib = 'OffsetX',
-                    type = 'float',
-                ),
-                'OffsetY': GameObjectProperty(
-                    attrib = 'OffsetY',
-                    type = 'float',
-                ),
-                'Scale': GameObjectProperty(
-                    attrib = 'Scale',
-                    type = 'float',
-                ),
-                'CanBeAssign': GameObjectProperty(
-                    attrib = 'CanBeAssign',
-                    type = 'bool',
-                ),
-            },
-        )
+        tag = 'Shop',
+        type = {
+            'image': GameObjectProperty(
+                attrib = 'Icon',
+                type = 'str',
+            ),
+            'offset_x': GameObjectProperty(
+                attrib = 'OffsetX',
+                type = 'int',
+            ),
+            'offset_y': GameObjectProperty(
+                attrib = 'OffsetY',
+                type = 'int',
+            ),
+            'scale': GameObjectProperty(
+                attrib = 'Scale',
+                type = 'float',
+            ),
+        },
+    )
     
-    ai: dict[Literal['special_ai', 'max_level'], int | str] = GameObjectProperty(
+    can_be_assigned_to_shop: bool = GameObjectProperty(
+        tag = 'Shop',
+        type = 'bool',
+        attrib = 'CanBeAssign',
+    )
+    
+    ai: dict[Literal['special_ai', 'at_max_level'], int | str] = GameObjectProperty(
         tag = 'AI',
         type = {
             'special_ai': GameObjectProperty(
                 attrib = 'Special_AI',
                 type = 'int',
             ),
-            'max_level': GameObjectProperty(
+            'at_max_level': GameObjectProperty(
                 attrib = 'Max_Level',
-                type = 'str',
+                type = 'bool',
             ),
         }
     )
     
-    tracking: dict[Literal['id', 'arrival_message'], int | str] = GameObjectProperty(
+    tracking_id: dict[Literal['id', 'arrival_message'], int | str] = GameObjectProperty(
         tag = 'Tracking',
-        type = {
-            'id': GameObjectProperty(
-                attrib = 'TrackingID',
-                type = 'int',
-            ),
-            'arrival_message': GameObjectProperty(
-                attrib = 'ArrivalPush',
-                type = 'str',
-            )
-        }
+        attrib = 'TrackingID',
+        type = 'int',
+    )
+    
+    arrival_notification = GameObjectProperty(
+        attrib = 'ArrivalPush',
+        type = 'str',
+        tag = 'Tracking',
     )
     
     arrival_xp: int = GameObjectProperty(
@@ -301,149 +333,84 @@ class PonyObject(GameObject):
     star_rewards: list[dict[Literal['reward', 'amount'], str | int]] = GameObjectProperty(
         tag = 'StarRewards',
         type = _star_rewards,
+        default = [],
     )
 
 
-    
-    model: dict[Literal['EffectColour_B', 'Collision_Y', 'Base_Growing', 'ShadowBone', 'EffectColour_R', 'BaseFG', 'ShadowScale', 'PivotY', 'Collision_W', 'BaseBG', 'FixedZOffset', 'AutoScale', 'ScrollSpeed', 'ZOffset', 'VineID', 'EffectColour_G', 'Alpha', 'Base_Ready', 'PivotX', 'Scale', 'Scrolling', 'DefaultIsLeft', 'Rotation', 'MediumLOD', 'GridSize', 'Model', 'Foreground', 'RootBone', 'Base', 'Collision_X', 'LowLOD', 'HighLOD', 'Camera', 'Collision_Z'], str] = GameObjectProperty(
+    model: dict = GameObjectProperty(
         tag = 'Model',
         type = {
-            'EffectColour_B': GameObjectProperty(
-                attrib = 'EffectColour_B',
-                type = 'str',
-            ),
-            'Collision_Y': GameObjectProperty(
-                attrib = 'Collision_Y',
-                type = 'str',
-            ),
-            'Base_Growing': GameObjectProperty(
-                attrib = 'Base_Growing',
-                type = 'str',
-            ),
-            'ShadowBone': GameObjectProperty(
-                attrib = 'ShadowBone',
-                type = 'str',
-            ),
-            'EffectColour_R': GameObjectProperty(
-                attrib = 'EffectColour_R',
-                type = 'str',
-            ),
-            'BaseFG': GameObjectProperty(
-                attrib = 'BaseFG',
-                type = 'str',
-            ),
-            'ShadowScale': GameObjectProperty(
-                attrib = 'ShadowScale',
-                type = 'str',
-            ),
-            'PivotY': GameObjectProperty(
-                attrib = 'PivotY',
-                type = 'str',
-            ),
-            'Collision_W': GameObjectProperty(
-                attrib = 'Collision_W',
-                type = 'str',
-            ),
-            'BaseBG': GameObjectProperty(
-                attrib = 'BaseBG',
-                type = 'str',
-            ),
-            'FixedZOffset': GameObjectProperty(
-                attrib = 'FixedZOffset',
-                type = 'str',
-            ),
-            'AutoScale': GameObjectProperty(
-                attrib = 'AutoScale',
-                type = 'str',
-            ),
-            'ScrollSpeed': GameObjectProperty(
-                attrib = 'ScrollSpeed',
-                type = 'str',
-            ),
-            'ZOffset': GameObjectProperty(
-                attrib = 'ZOffset',
-                type = 'str',
-            ),
-            'VineID': GameObjectProperty(
-                attrib = 'VineID',
-                type = 'str',
-            ),
-            'EffectColour_G': GameObjectProperty(
-                attrib = 'EffectColour_G',
-                type = 'str',
-            ),
-            'Alpha': GameObjectProperty(
-                attrib = 'Alpha',
-                type = 'str',
-            ),
-            'Base_Ready': GameObjectProperty(
-                attrib = 'Base_Ready',
-                type = 'str',
-            ),
-            'PivotX': GameObjectProperty(
-                attrib = 'PivotX',
-                type = 'str',
-            ),
-            'Scale': GameObjectProperty(
+            'scale': GameObjectProperty(
+                type = 'float',
                 attrib = 'Scale',
-                type = 'str',
             ),
-            'Scrolling': GameObjectProperty(
-                attrib = 'Scrolling',
+            'low_LOD': GameObjectProperty(
                 type = 'str',
-            ),
-            'DefaultIsLeft': GameObjectProperty(
-                attrib = 'DefaultIsLeft',
-                type = 'str',
-            ),
-            'Rotation': GameObjectProperty(
-                attrib = 'Rotation',
-                type = 'str',
-            ),
-            'MediumLOD': GameObjectProperty(
-                attrib = 'MediumLOD',
-                type = 'str',
-            ),
-            'GridSize': GameObjectProperty(
-                attrib = 'GridSize',
-                type = 'str',
-            ),
-            'Model': GameObjectProperty(
-                attrib = 'Model',
-                type = 'str',
-            ),
-            'Foreground': GameObjectProperty(
-                attrib = 'Foreground',
-                type = 'str',
-            ),
-            'RootBone': GameObjectProperty(
-                attrib = 'RootBone',
-                type = 'str',
-            ),
-            'Base': GameObjectProperty(
-                attrib = 'Base',
-                type = 'str',
-            ),
-            'Collision_X': GameObjectProperty(
-                attrib = 'Collision_X',
-                type = 'str',
-            ),
-            'LowLOD': GameObjectProperty(
                 attrib = 'LowLOD',
-                type = 'str',
             ),
-            'HighLOD': GameObjectProperty(
+            'medium_LOD': GameObjectProperty(
+                type = 'str',
+                attrib = 'MediumLOD',
+            ),
+            'high_LOD': GameObjectProperty(
+                type = 'str',
                 attrib = 'HighLOD',
-                type = 'str',
             ),
-            'Camera': GameObjectProperty(
-                attrib = 'Camera',
+            'root_bone': GameObjectProperty(
                 type = 'str',
+                attrib = 'RootBone',
             ),
-            'Collision_Z': GameObjectProperty(
-                attrib = 'Collision_Z',
+            'shadow_bone': GameObjectProperty(
                 type = 'str',
+                attrib = 'ShadowBone',
             ),
         }
     )
     
+    changeling: str = GameObjectProperty(
+        tag = 'IsChangelingWithSet',
+        type = 'str',
+        attrib = 'AltPony',
+    )
+    
+    @staticmethod
+    def _friends(xml: etree._Element):
+        friends = []
+        for child in xml:
+            if child.tag == 'Friend':
+                for friend in child:
+                    id = friend.get('Value')
+                    if id:
+                        friends.append(id)
+        
+        return friends
+
+    friends: list[str] = GameObjectProperty(
+        tag = 'Friends',
+        type = _friends,
+        default = [],
+    )
+    
+    never_shapeshift: bool = GameObjectProperty(
+        tag = 'Misc',
+        type = 'bool',
+        attrib = 'NeverShapeshift',
+    )
+    
+    never_crystallize: bool = GameObjectProperty(
+        tag = 'Misc',
+        type = 'bool',
+        attrib = 'NeverCrystallize',
+    )
+    
+    is_pony: bool = GameObjectProperty(
+        tag = 'Misc',
+        type = 'rbool',
+        attrib = 'IsNotPony',
+    )
+    
+    has_pets: bool = GameObjectProperty(
+        tag = 'PetsAvailability',
+        type = 'rbool',
+        attrib = 'BanPets',
+    )
