@@ -22,6 +22,11 @@ dependencies = [
   "dataclasses-struct",
   "Pillow",
   "lxml",
+  "astc-encoder-py",
+  "numpy",
+  "charset-normalizer",
+  "beautifulsoup4",
+  "vxn-py",
 ]
 dynamic = ["version"]
 
