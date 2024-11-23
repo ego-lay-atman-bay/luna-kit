@@ -2,7 +2,9 @@ from typing import IO, Literal
 
 from lxml import etree
 
-from ._gameobjects import GameObject, PonyObject
+from ._gameobjects import GameObject
+
+from ._gameobjects.pony import PonyObject
 
 
 class GameObjectData():

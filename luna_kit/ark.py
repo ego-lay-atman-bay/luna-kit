@@ -14,7 +14,9 @@ import dataclasses_struct as dcs
 import zstandard
 from rich.progress import Progress, track
 
-from . import enums, types, xxtea
+from . import enums
+
+from . import types, xxtea
 from .console import console
 from .file_utils import is_binary_file, is_text_file
 from .utils import posix_path, trailing_slash
@@ -47,13 +49,6 @@ FILE_METADATA_FORMAT = "128s128s5I16sI"
 
 def decode(b: bytes, encoding: str = 'ascii'):
     return b.decode(encoding).rstrip('\x00')
-
-def read_bytes(b: bytes | bytearray, order: Literal[enums.ENDIAN.BIG, enums.ENDIAN.LITTLE] = enums.ENDIAN.BIG):
-    if order == enums.ENDIAN.LITTLE:
-        b = bytearray(b)
-        b.reverse()
-
-    return bytes(b)
 
 class ARK():
     KEY = [0x3d5b2a34, 0x923fff10, 0x00e346a4, 0x0c74902b]
@@ -179,9 +174,6 @@ class ARK():
     
     def _read_header(self, file: IO) -> Header:
         """Read the header of a `.ark` file.
-        
-        
-
 
         Args:
             file (IO): File-like object.
@@ -192,10 +184,7 @@ class ARK():
         
         header = Header.from_packed(
             file.read(dcs.get_struct_size(Header))
-            
-            
         )
-        
         
         return header
     

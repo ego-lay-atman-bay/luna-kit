@@ -123,6 +123,18 @@ class SheetCommand(CLICommand):
                     sheet.append(pony_data)
                 
                 match args.format:
+                    case 'csv':
+                        table = []
+                        header = [
+                            'name',
+                            'description',
+                            'house',
+                            'location',
+                            'cost',
+                            'currency',
+                            'quest',
+                            
+                        ]
                     case _: # json
                         with open(args.output, 'w') as file:
                             json.dump(sheet, file, indent = 2, ensure_ascii = False)
