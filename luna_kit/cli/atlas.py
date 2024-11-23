@@ -52,7 +52,8 @@ class AtlasCommand(CLICommand):
         files: list[str] = []
         
         for pattern in args.files:
-            files.extend(glob(pattern))
+            files.extend(glob(pattern, recursive = True))
+        
         
         search_folders: list[str] = args.search_folders
         if search_folders and len(search_folders) == 0:

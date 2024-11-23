@@ -1,172 +1,12 @@
-from collections.abc import Callable, Mapping
-from copy import copy, deepcopy
 from itertools import zip_longest
-from typing import Any, Literal, TypedDict
-from dataclasses import dataclass
-import functools
+from typing import Literal
 
 from lxml import etree
 
-from .utils import strToFloat, strToInt
+from ..utils import strToInt
+from .gameobject import (GameObject, GameObjectArray, GameObjectProperty,
+                         register_game_object, zip_game_properties)
 
-# class GameObjectProperty(TypedDict, total = False):
-#     tag: str
-#     type: "Literal['str', 'int', 'float', 'bool'] | Callable | Mapping[str, GameObjectProperty]"
-#     attrib: str
-
-
-type GameObjectType = Literal['str', 'int', 'float', 'bool', 'rbool'] | Callable | Mapping[str, GameObjectProperty]
-
-def game_object_type_to_annotation(type: GameObjectType):
-    result = Any
-    
-    if callable(type):
-        result = type.__annotations__.get('return')
-    elif isinstance(type, dict):
-        result = {}
-        for key, info in type.items():
-            if isinstance(info, GameObjectProperty):
-                result[key] = game_object_type_to_annotation(info.type)
-        
-        result = TypedDict('GameObjectProperties', result)
-    else:
-        match type:
-            case 'bool':
-                result = bool
-            case 'rbool':
-                result = bool
-            case 'int':
-                result = int
-            case 'float':
-                result = float
-            case 'str':
-                result = str
-            case _:
-                result = Any
-    
-    return result
-    
-
-class GameObject():
-    CATEGORY = ''
-    PROPERTIES: Mapping[str, 'GameObjectProperty'] = {}
-    OBJECTS: 'Mapping[str, GameObject]' = {}
-    
-    @classmethod
-    def from_category(cls: 'GameObject', xml: etree._Element, category: str = None):
-        if category in cls.OBJECTS:
-            cls = cls.OBJECTS[category]
-        
-        return cls(xml)
-    
-    @classmethod
-    def register_object(cls, object: 'GameObject', category: str | None = None):
-        
-        if not issubclass(object, GameObject):
-            e = TypeError('game object must inherit from GameObject')
-            e.add_note(str(object))
-            raise e
-        
-        if not category:
-            category = object.CATEGORY
-        
-        cls.OBJECTS[category] = object
-    
-    def __init__(self, xml: etree._Element) -> None:
-        for prop, value in self.PROPERTIES.items():
-            if not isinstance(value, GameObjectProperty):
-                continue
-            
-            default = deepcopy(value.default)
-            
-            if default is None:
-                match value.type:
-                    case 'bool':
-                        default = False
-                    case 'rbool':
-                        default = True
-                    case 'float':
-                        default = 0.0
-                    case 'int':
-                        default = 0
-                    case 'str':
-                        default = ''
-            
-            self.__setattr__(prop, default)
-        
-        self._set_xml_data(xml)
-        
-        for element in xml:
-            self._set_xml_data(element)
-    
-    def _set_xml_data(self, xml: etree._Element):
-        props = {}
-        for key, prop_info in self.PROPERTIES.items():
-            if prop_info.tag == xml.tag:
-                props[key] = prop_info
-        
-        if props == {}:
-            return
-        
-        for prop, prop_info in props.items():
-            value = self._get_element_value(xml, prop_info)
-            self.__setattr__(prop, value)
-    
-    def _get_element_value(self, element: etree._Element, prop_info: 'GameObjectProperty'):
-        value = None
-        if prop_info.attrib:
-            value = element.attrib.get(prop_info.attrib, '')
-        
-        if callable(prop_info.type):
-            value = prop_info.type(element)
-        elif isinstance(prop_info.type, dict):
-            value = {}
-            for key, info in prop_info.type.items():
-                value[key] = self._get_element_value(element, info)
-        else:
-            match prop_info.type:
-                case 'bool':
-                    value = bool(strToInt(value or 0))
-                case 'rbool':
-                    value = not bool(strToInt(value or 0))
-                case 'int':
-                    value = strToInt(value or 0)
-                case 'float':
-                    value = strToFloat(value or 0.0)
-                case _:
-                    value = value
-        
-        return value
-
-def make_type(cls):
-    return cls()
-
-@dataclass
-class GameObjectProperty():
-    type: GameObjectType = None
-    attrib: str = None
-    tag: str = None
-    default: Any = None
-
-def register_game_object[T](cls: T) -> T:
-    GameObject.register_object(cls)
-    
-    cls.PROPERTIES = {}
-    
-    attrs = vars(cls).copy()
-    
-    for attr, value in attrs.items():
-        if not isinstance(value, GameObjectProperty):
-            continue
-        
-        cls.PROPERTIES[attr] = value
-        
-        setattr(cls, attr, None)
-        
-        cls.__annotations__[attr] = game_object_type_to_annotation(value.type)
-    
-    
-    return cls
 
 @register_game_object
 class PonyObject(GameObject):
@@ -192,14 +32,6 @@ class PonyObject(GameObject):
             star_rewards.append(reward)
         
         return star_rewards
-    
-    
-
-    id: str = GameObjectProperty(
-        tag = 'GameObject',
-        type = 'str',
-        attrib = 'ID',
-    )
     
     name: str = GameObjectProperty(
         tag = 'Name',
@@ -332,7 +164,21 @@ class PonyObject(GameObject):
     
     star_rewards: list[dict[Literal['reward', 'amount'], str | int]] = GameObjectProperty(
         tag = 'StarRewards',
-        type = _star_rewards,
+        # type = _star_rewards,
+        type = zip_game_properties(
+            GameObjectProperty(
+                GameObjectArray(
+                    'ID',
+                    'str',
+                )
+            ),
+            GameObjectProperty(
+                GameObjectArray(
+                    'Amount',
+                    'int',
+                )
+            ),
+        ),
         default = [],
     )
 
@@ -414,3 +260,4 @@ class PonyObject(GameObject):
         type = 'rbool',
         attrib = 'BanPets',
     )
+
