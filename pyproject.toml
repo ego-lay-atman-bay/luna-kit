@@ -35,11 +35,11 @@ dynamic = ["version"]
 "Bug Tracker" = "https://github.com/ego-lay-atman-bay/luna-kit/issues"
 "Documentation" = "https://ego-lay-atman-bay.github.io/luna-kit/"
 
+[tool.setuptools]
+package-dir = {"luna_kit" = "luna_kit"}
+
 [tool.setuptools.dynamic]
 version = { attr = "luna_kit.__version__" }
-
-[tool.setuptools.packages.find]
-include = ["luna_kit"]
 
 [project.scripts]
 luna-kit = 'luna_kit.__main__:main'
