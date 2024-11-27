@@ -29,3 +29,6 @@ def strToFloat(value: str, default = 0.0):
         return float(value)
     except:
         return default
+
+def strToBool(value: str):
+    return str(value).lower() in ['t', 'true', '1', 'y', 'yes']
