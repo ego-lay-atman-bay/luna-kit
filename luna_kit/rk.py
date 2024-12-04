@@ -268,7 +268,10 @@ class RKFormat():
                     parentIndex = parent,
                     index = index,
                     child = child,
-                    matrix = numpy.frombuffer(matrix, dtype = numpy.float32).reshape((4,4))[:3],
+                    matrix = numpy.frombuffer(
+                        matrix,
+                        dtype = numpy.float32,
+                    ).reshape((4,4)).swapaxes(1,0)[:,:3],
                     name = read_ascii_string(name),
                 ))
         
