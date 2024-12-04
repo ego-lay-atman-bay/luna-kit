@@ -4,8 +4,8 @@ import warnings
 
 from lxml import etree
 
-from ._gameobjects import GameObject
-from ._gameobjects.pony import PonyObject
+# from ._gameobjects import GameObject
+# from ._gameobjects.pony import PonyObject
 from .utils import strToBool, strToFloat, strToInt
 
 
