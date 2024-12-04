@@ -28,7 +28,7 @@ class LOCCommand(CLICommand):
     
     @classmethod
     def run_command(cls, args: Namespace):
-        from ..loc import LocalizationFile
+        from ..loc import LOC
         import os
         from ..console import console
             
@@ -43,7 +43,7 @@ class LOCCommand(CLICommand):
             if input(f'"{output}" already exists, do you want to override it? (Y/n): ').lower() in ['n', 'no', 'false', '0']:
                 exit()
         
-        loc_file = LocalizationFile(args.file)
+        loc_file = LOC(args.file)
         loc_file.export(output, indent = 2)
         
         console.print(f'saved to {output}')
