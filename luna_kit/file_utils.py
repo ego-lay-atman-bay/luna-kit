@@ -1,4 +1,4 @@
-from typing import IO, BinaryIO, TextIO
+from typing import IO, BinaryIO, TextIO, TypeAlias
 import io
 from contextlib import nullcontext
 
@@ -30,7 +30,7 @@ def get_filesize(file: IO):
     file.seek(pos)
     return size
 
-type PathOrBinaryFile = str | bytes | bytearray | BinaryIO
+PathOrBinaryFile: TypeAlias = str | bytes | bytearray | BinaryIO
 
 class BinaryReader():
     pass

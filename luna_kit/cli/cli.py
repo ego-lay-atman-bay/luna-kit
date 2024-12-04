@@ -61,7 +61,7 @@ class CLICommand():
         ...
 
 
-def register_command[T](cls: T) -> T:
+def register_command(cls):
     CLI.register_command(cls)
 
     return cls
