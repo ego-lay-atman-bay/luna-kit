@@ -5,3 +5,4 @@ from . import enums
 from .ark import ARK, ARKFile
 from .loc import LocalizationFile
 from .texatlas import TexAtlas
+from .rk import RKFormat
