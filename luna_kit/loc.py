@@ -5,10 +5,9 @@ import os
 import struct
 from typing import Annotated, BinaryIO
 
-from . import file_utils
 from .file_utils import is_binary_file, is_text_file
 
-class LocalizationFile():
+class LOC():
     def __init__(self, file: str | bytes | bytearray | BinaryIO) -> None:
         self.string_count = 0
         self.filename = ''

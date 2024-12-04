@@ -59,7 +59,7 @@ class SheetCommand(CLICommand):
         match args.type:
             case 'characters':
                 from ..gameobjectdata import GameObjectData
-                from ..loc import LocalizationFile
+                from ..loc import LOC
                 from ..shopdata import ShopData
                 from ..constants import STAR_REWARDS, SPECIAL_AI
                 import json
@@ -69,7 +69,7 @@ class SheetCommand(CLICommand):
                 strings = {}
                 
                 if args.loc:
-                    strings = LocalizationFile(args.loc).strings
+                    strings = LOC(args.loc).strings
                 
                 def translate(string: str):
                     return strings.get(string, string)
