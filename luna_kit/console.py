@@ -1,3 +1,8 @@
-from rich.console import Console
+RICH_LOADED = False
+console = None
 
-console = Console(quiet = True)
+try:
+    from rich.console import Console
+    console = Console(quiet = True)
+except ImportError:
+    pass

@@ -12,14 +12,12 @@ from typing import IO, Annotated, BinaryIO, Literal, NamedTuple
 
 import dataclasses_struct as dcs
 import zstandard
-from rich.progress import Progress, track
 
 from . import enums
 
 from . import types, xxtea
-from .console import console
-from .file_utils import is_binary_file, is_text_file
-from .utils import posix_path, trailing_slash
+from .file_utils import is_binary_file, is_text_file, PathOrBinaryFile, open_binary
+from .utils import posix_path, trailing_slash, read_ascii_string
 
 
 @dcs.dataclass()
@@ -34,7 +32,7 @@ HEADER_FORMAT = "3I"
 
 
 @dcs.dataclass()
-class FileMetadata():
+class _FileMetadataStruct:
     filename: Annotated[bytes, 128]
     pathname: Annotated[bytes, 128]
     file_location: dcs.U32
@@ -45,16 +43,35 @@ class FileMetadata():
     md5sum: Annotated[bytes, 16]
     priority: dcs.U32
 
-FILE_METADATA_FORMAT = "128s128s5I16sI"
+@dataclass
+class FileMetadata:
+    filename: str
+    pathname: str
+    file_location: int
+    original_filesize: int
+    compressed_size: int
+    encrypted_nbytes: int
+    timestamp: int
+    md5sum: bytes
+    priority: int
+    
+    @property
+    def full_path(self):
+        return os.path.join(self.pathname, self.filename)
+    
+    @full_path.setter
+    def full_path(self, path: str):
+        self.pathname = os.path.dirname(path)
+        self.filename = os.path.basename(path)
 
-def decode(b: bytes, encoding: str = 'ascii'):
-    return b.decode(encoding).rstrip('\x00')
+
+FILE_METADATA_FORMAT = "128s128s5I16sI"
 
 class ARK():
     KEY = [0x3d5b2a34, 0x923fff10, 0x00e346a4, 0x0c74902b]
     
     header: Header
-    metadata: list[FileMetadata]
+    files: list[FileMetadata]
     
     
     _decompresser = zstandard.ZstdDecompressor()
@@ -71,22 +88,42 @@ class ARK():
             file (str | bytes | bytearray | BinaryIO | None, optional): Input file. Defaults to None.
             output (str | None, optional): Optional output folder to extract files to. Defaults to None.
         """
-        self.files: list[ARKFile] = []
+        self.__open_file: BinaryIO = None
+        self.files: list[FileMetadata] = []
         self.header = Header()
         
-        
-        if file != None:
-            self.read(
-                file,
-                output,
-                ignore_errors,
-            )
+        self.file = file
+    
+    def __enter__(self):
+        self.open()
+        self.read(self.__open_file)
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+    
+    def open(self):
+        self.__close_file = True
+        if isinstance(self.file, str):
+            self.__open_file = open(self.file, 'rb')
+        elif isinstance(self.file, (bytes, bytearray)):
+            self.__open_file = io.BytesIO(self.file)
+        elif is_binary_file(self.file):
+            self.__close_file = False
+            self.__open_file = self.file
+        elif is_text_file(self.file):
+            raise TypeError('file must be open in binary mode')
+        else:
+            raise TypeError('cannot open file')
+    
+    def close(self):
+        if self.__close_file:
+            self.__open_file.close()
+        self.__close_file = False
     
     def read(
         self,
-        file: str | bytes | bytearray | BinaryIO,
-        output: str | None = None,
-        ignore_errors: bool = False,
+        file: BinaryIO,
     ):
         """Extract `.ark` files.
 
@@ -98,80 +135,36 @@ class ARK():
             TypeError: file must be open in binary mode
             TypeError: cannot open file
         """
-        if isinstance(file, str) and os.path.isfile(file):
-            context_manager = open(file, 'rb')
-        elif isinstance(file, (bytes, bytearray)):
-            context_manager = io.BytesIO(file)
-        elif is_binary_file(file):
-            context_manager = contextlib.nullcontext(file)
-        elif is_text_file(file):
-            raise TypeError('file must be open in binary mode')
-        else:
-            raise TypeError('cannot open file')
+        if not is_binary_file(file):
+            raise TypeError('file must be file-like object open in binary read mode')
         
         self.files = []
         
-        with context_manager as open_file:
-            open_file.seek(0)
-            
-            self.header = self._read_header(open_file)
-
-
-            self.metadata = self._get_metadata(open_file)
-            # print(self.metadata)
-            
-            failed = []
-            
-            for file_metadata in track(
-                self.metadata,
-                console = console,
-                description = 'Extracting...',
-            ):
-                filename = posix_path(os.path.join(decode(file_metadata.pathname), decode(file_metadata.filename)))
-                console.print(f'extracting [yellow]{filename}[/yellow]')
-                try:
-                    ark_file = self._get_file_data(file_metadata, open_file)
-                    self.files.append(ark_file)
-                    
-                    if output:
-                        ark_file.save(os.path.join(output, ark_file.fullpath))
-                except Exception as e:
-                    e.add_note(filename)
-                    failed.append(filename)
-                    if not ignore_errors:
-                        raise e
-            
-            if len(failed):
-                console.print('\nFailed to extract:')
-                for filename in failed:
-                    console.print(f'[yellow]{filename}[/yellow]')
-    
-    def write(self, file: str | bytes | bytearray | BinaryIO):
-        if isinstance(file, str):
-            context_manager = open(file, 'wb')
-        elif is_binary_file(file):
-            context_manager = contextlib.nullcontext(file)
-        elif is_text_file(file):
-            raise TypeError('file must be open in binary mode')
-        else:
-            raise TypeError('cannot open file')
+        self.__open_file.seek(0)
         
-        with context_manager as open_file:
-            open_file.seek(0)
-            packed_files = self._pack_files()
-            self.header.metadata_offset = dcs.get_struct_size(Header)
-            for data, meta in packed_files:
-                
-                
-                meta.file_location = self.header.metadata_offset
-                self.header.metadata_offset += len(data)
-                
-            
-            
-            self._write_header(open_file)
-            self._write_files_and_metadata(open_file, packed_files)
-            
+        self.header = self._read_header(self.__open_file)
+        self.files = self._get_metadata(self.__open_file)
     
+
+    def write(self, file: BinaryIO):
+        if not is_binary_file(file):
+            raise TypeError('file must be file-like object open in binary write mode')
+        
+        self.__open_file.seek(0)
+        packed_files = self._pack_files()
+        self.header.metadata_offset = dcs.get_struct_size(Header)
+        for data, meta in packed_files:
+            
+            
+            meta.file_location = self.header.metadata_offset
+            self.header.metadata_offset += len(data)
+        
+        self._write_header(self.__open_file)
+        self._write_files_and_metadata(self.__open_file, packed_files)
+    
+    def read_file(self, file: FileMetadata):
+    
+        return self._get_file_data(file, self.__open_file)
     def _read_header(self, file: IO) -> Header:
         """Read the header of a `.ark` file.
 
@@ -198,7 +191,7 @@ class ARK():
         
 
 
-    def _get_metadata(self, file: IO) -> None | list[FileMetadata]:
+    def _get_metadata(self, file: IO) -> None | list[_FileMetadataStruct]:
         filesize: int = None
         
         file.seek(0, os.SEEK_END)
@@ -212,7 +205,7 @@ class ARK():
         metadata_size = xxtea.get_phdr_size(filesize - self.header.metadata_offset)
         # print(f'metadata size: {metadata_size}')
         
-        raw_metadata_size = self.header.file_count * dcs.get_struct_size(FileMetadata)
+        raw_metadata_size = self.header.file_count * dcs.get_struct_size(_FileMetadataStruct)
         # print(f'raw metadata size: {raw_metadata_size}')
         
         
@@ -231,17 +224,27 @@ class ARK():
             
             
 
-        metadata_size = dcs.get_struct_size(FileMetadata)
+        metadata_size = dcs.get_struct_size(_FileMetadataStruct)
         result = []
         for file_index in range(self.header.file_count):
             offset = file_index * metadata_size
             
             
-            file_result = FileMetadata.from_packed(
+            file_result: _FileMetadataStruct = _FileMetadataStruct.from_packed(
                 raw_metadata[offset : offset + metadata_size]
             )
             
-            result.append(file_result)
+            result.append(FileMetadata(
+                filename = read_ascii_string(file_result.filename),
+                pathname = read_ascii_string(file_result.pathname),
+                file_location = file_result.file_location,
+                original_filesize = file_result.original_filesize,
+                compressed_size = file_result.compressed_size,
+                encrypted_nbytes = file_result.encrypted_nbytes,
+                timestamp = file_result.timestamp,
+                md5sum = file_result.md5sum.hex(),
+                priority = file_result.priority,
+            ))
 
         return result
     
@@ -274,18 +277,18 @@ class ARK():
             elif self.header.ark_version == 3:
                 file_data = self._decompresser.decompress(file_data, metadata.original_filesize)
         
-        if hashlib.md5(file_data).hexdigest() != metadata.md5sum.hex():
-            warnings.warn(f'file "{posix_path(os.path.join(decode(metadata.pathname), decode(metadata.filename)))}" hash does not match "{metadata.md5sum.hex()}"')
+        if hashlib.md5(file_data).hexdigest() != metadata.md5sum:
+            warnings.warn(f'file "{posix_path(os.path.join(metadata.pathname, metadata.filename))}" hash does not match "{metadata.md5sum}"')
         
         return ARKFile(
-            os.path.join(decode(metadata.pathname), decode(metadata.filename)),
+            os.path.join(metadata.pathname, metadata.filename),
             file_data,
             encrypted = encrypted,
             compressed = compressed,
             priority = metadata.priority,
         )
 
-    def _pack_files(self) -> list[tuple[bytes, FileMetadata]]:
+    def _pack_files(self) -> list[tuple[bytes, _FileMetadataStruct]]:
         packed = []
         
         for file in self.files:
@@ -298,7 +301,7 @@ class ARK():
         
         return packed
 
-    def _write_files_and_metadata(self, file: IO, packed_files: list[tuple[bytes, FileMetadata]]):
+    def _write_files_and_metadata(self, file: IO, packed_files: list[tuple[bytes, _FileMetadataStruct]]):
         metadata_block: bytes = b''
         for data, meta in packed_files:
             file.seek(meta.file_location)
@@ -386,9 +389,9 @@ class ARKFile():
         with open(path, 'wb') as file:
             file.write(self.data)
     
-    def pack(self) -> bytes | FileMetadata:
+    def pack(self) -> bytes | _FileMetadataStruct:
         result = self.data
-        metadata = FileMetadata(
+        metadata = _FileMetadataStruct(
             self.filename.encode('ascii'),
             self.pathname.encode('ascii'),
             0,
