@@ -12,7 +12,7 @@ import numpy
 from . import enums
 from .file_utils import PathOrBinaryFile, open_binary
 from .pvr import PVR
-from .utils import strToBool, strToInt, strToFloat
+from .utils import read_ascii_string, strToBool, strToInt, strToFloat
 
 USHORT_MAX = 65535
 
@@ -23,14 +23,6 @@ class Header():
     unknown1: dcs.U32 = 0
     unknown2: dcs.U32 = 0
     name: Annotated[bytes, 64] = b' ' * 64
-
-def read_ascii_string(file: BinaryIO | bytes, length: int = 64) -> str:
-    if isinstance(file, (bytes, bytearray)):
-        data = file
-    else:
-        data = file.read(length)
-    
-    return data.split(b'\x00')[0].decode('ascii', errors='ignore')
 
 def parse_rkm(filename: str):
     with open(filename, 'r', newline = '') as file:
