@@ -53,6 +53,8 @@ class ARKParser(CLICommand):
         for pattern in args.files:
             files.extend(glob(pattern))
         
+        files.sort()
+        
         if args.output:
             output = args.output
         elif len(files) == 1:
