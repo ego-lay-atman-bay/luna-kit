@@ -42,3 +42,21 @@ def read_ascii_string(file: BinaryIO | bytes, length: int = 64) -> str:
         data = file.read(length)
 
     return data.strip(b'\x00').decode('ascii', errors='ignore')
+
+
+def get_PIL_format(extension: str):
+    import PIL
+    
+    if not extension.startswith('.'):
+        extension = '.' + extension
+    extension = extension.lower()
+    format = None
+    if extension not in PIL.Image.EXTENSION:
+        PIL.Image.init()
+    try:
+        format = PIL.Image.EXTENSION[extension]
+    except KeyError as e:
+        msg = f"unknown file extension: {extension}"
+        raise ValueError(msg) from e
+    
+    return format
