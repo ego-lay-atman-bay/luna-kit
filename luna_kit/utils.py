@@ -2,6 +2,9 @@ import os
 import pathlib
 from typing import BinaryIO
 
+import PIL.IcnsImagePlugin
+import PIL.ImageChops
+
 
 def posix_path(path):
     result = pathlib.Path(path)
@@ -45,16 +48,15 @@ def read_ascii_string(file: BinaryIO | bytes, length: int = 64) -> str:
 
 
 def get_PIL_format(extension: str):
-    import PIL
+    import PIL.Image
     
     if not extension.startswith('.'):
         extension = '.' + extension
     extension = extension.lower()
     format = None
-    if extension not in PIL.Image.EXTENSION:
-        PIL.Image.init()
+    extensions = PIL.Image.registered_extensions()
     try:
-        format = PIL.Image.EXTENSION[extension]
+        format = extensions[extension]
     except KeyError as e:
         msg = f"unknown file extension: {extension}"
         raise ValueError(msg) from e
