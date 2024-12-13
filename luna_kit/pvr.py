@@ -52,7 +52,7 @@ class PVR:
         
         return header
     
-    def _read_image(self, file: BinaryIO):
+    def _read_image(self, file: BinaryIO = None):
         image = None
         
         if self.header.format == 34:
@@ -70,3 +70,32 @@ class PVR:
             raise NotImplemented(f'Format {self.header.format} not implemented')
         
         return image
+    
+    def save(self, *args, **kwargs):
+        """Calls `self.image.save`. All arguments are passed into the PIL.Image.Image.save method.
+        
+        Args:
+            All arguments are the same as `PIL.Image.Image.save`
+        """
+        return self.image.save(*args, **kwargs)
+    
+    def show(self, title: str | None = None):
+        """Shows image using `self.image.show()`
+
+        Displays this image. This method is mainly intended for debugging purposes.
+
+        This method calls PIL.ImageShow.show internally. You can use
+        PIL.ImageShow.register to override its default behaviour.
+
+        The image is first saved to a temporary file. By default, it will be in PNG format.
+
+        On Unix, the image is then opened using the **xdg-open**, **display**, **gm**, **eog** or **xv** utility, depending on which one can be found.
+
+        On macOS, the image is opened with the native Preview application.
+
+        On Windows, the image is opened with the standard PNG display utility.
+
+        Args:
+            title (str, optional): Optional title to use for the image window, where possible.
+        """
+        return self.image.show(title)
