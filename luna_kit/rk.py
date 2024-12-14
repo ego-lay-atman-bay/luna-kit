@@ -12,7 +12,7 @@ import numpy
 from . import enums
 from .file_utils import PathOrBinaryFile, open_binary
 from .pvr import PVR
-from .utils import read_ascii_string, strToBool, strToInt, strToFloat
+from .utils import read_ascii_string, strToBool, strToInt, strToFloat, increment_name_num
 
 USHORT_MAX = 65535
 
@@ -113,10 +113,12 @@ class RKFormat():
         
         file.seek(texture_info[0])
 
-        materials = []
+        materials: list[Material] = []
         
         for x in range(texture_info[1]):
             name = read_ascii_string(file)
+            if name == '':
+                name = increment_name_num(materials[-1].name)
             rkm = os.path.join(
                 os.path.dirname(self.filename),
                 name + '.rkm',

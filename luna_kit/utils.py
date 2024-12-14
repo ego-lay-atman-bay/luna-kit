@@ -62,3 +62,24 @@ def get_PIL_format(extension: str):
         raise ValueError(msg) from e
     
     return format
+
+
+def split_name_num(name: str):
+    head = name.rstrip('0123456789#')
+    tail = name[len(head):]
+    return head, tail
+
+def increment_name_num(name: str, amount: int = 1):
+    head, tail = split_name_num(name)
+    number = 0
+
+    if tail:
+        number = int(tail)
+        number += amount
+        return '{head}{number:0{length}d}'.format(
+            head = head,
+            number = number,
+            length = len(tail),
+        )
+    else:
+        return name
