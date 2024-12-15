@@ -84,6 +84,9 @@ class RKFormat():
             
             self.meshes = self._read_meshes(open_file)
     
+    def get_verts(self, mesh: 'Mesh'):
+        mesh.triangles
+    
     def _read_header(self, file: BinaryIO):
         header: Header = Header.from_packed(
             file.read(dcs.get_struct_size(Header))
@@ -312,12 +315,14 @@ class RKFormat():
         if self.info.get(enums.rk.Info.VERTS, (0,0,0))[1] > USHORT_MAX:
             triangle_format = 'I'
         
+        file.seek(mesh_info[0])
         for submesh in self.submeshes:
             mesh = Mesh(submesh.name)
             meshes.append(mesh)
             mesh.material = self.materials[submesh.material].name
+            mesh.material_index = submesh.material
             
-            file.seek(mesh_info[0] + submesh.offset)
+            # file.seek(mesh_info[0] + submesh.offset)
             for triangle_data in struct.iter_unpack(
                 f'3{triangle_format}',
                 file.read(submesh.triangles * 3 * struct.calcsize(triangle_format)),
@@ -377,6 +382,7 @@ class RKM:
 class Mesh:
     name: str
     material: str = ''
+    material_index: int = 0
     triangles: list['Triangle'] = dataclasses.field(default_factory = list)
 
 
