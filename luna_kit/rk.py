@@ -8,6 +8,7 @@ from typing import Annotated, BinaryIO, Literal
 
 import dataclasses_struct as dcs
 import numpy
+import PIL.Image
 
 from . import enums
 from .file_utils import PathOrBinaryFile, open_binary
@@ -28,7 +29,10 @@ def parse_rkm(filename: str):
     with open(filename, 'r', newline = '') as file:
         data = [row for row in csv.reader(file, delimiter='=') if len(row)]
     
-    return RKM(**dict(data))
+    return RKM(
+        filename = filename,
+        **dict(data),
+    )
 
 class RKFormat():
     MAGIC = b'RKFORMAT'
@@ -255,20 +259,23 @@ class RKFormat():
         
         if bones_info[1]:
             file.seek(bones_info[0])
-            for parent, index, child, matrix, name in struct.iter_unpack(
+            for parent, index, child, matrix_buffer, name in struct.iter_unpack(
                 bone_format,
                 file.read(bones_info[1] * struct.calcsize(
                     bone_format
                 )),
             ):
+                matrix = numpy.frombuffer(
+                        matrix_buffer,
+                        dtype = numpy.float32,
+                    ).reshape((4,4))
+                
                 bones.append(Bone(
                     parentIndex = parent,
                     index = index,
                     child = child,
-                    matrix = numpy.frombuffer(
-                        matrix,
-                        dtype = numpy.float32,
-                    ).reshape((4,4)).swapaxes(1,0)[:,:3],
+                    matrix_3x4 = matrix.swapaxes(1,0)[:,:3],
+                    matrix_4x4 = matrix,
                     name = read_ascii_string(name),
                 ))
         
@@ -296,9 +303,9 @@ class RKFormat():
             vert = self.verts[vert_index]
             
             
-            vert.index1 = unpacked[0]
+            vert.bone_index1 = unpacked[0]
             vert.weight1 = unpacked[2] / USHORT_MAX
-            vert.index2 = unpacked[1]
+            vert.bone_index2 = unpacked[1]
             vert.weight2 = unpacked[3] / USHORT_MAX
             
             
@@ -377,6 +384,16 @@ class RKM:
     @property
     def dir(self):
         return os.path.dirname(self.filename)
+    
+    @property
+    def image(self):
+        filename = os.path.join(self.dir, self.texture_name)
+        if not self.NoCompress:
+            image = PVR(filename).image
+        else:
+            image = PIL.Image.open(filename)
+        
+        return image
 
 @dataclass
 class Mesh:
@@ -391,7 +408,8 @@ class Bone:
     index: int
     child: int
     name: str
-    matrix: numpy.ndarray
+    matrix_3x4: numpy.ndarray
+    matrix_4x4: numpy.ndarray
     parentName: str | None = None,
     parentIndex: int = -1
 
@@ -427,9 +445,9 @@ class Vert:
     u: float = 0
     v: float = 0
     
-    index1: int = 0
+    bone_index1: int = 0
     weight1: float = 0
-    index2: int = 0
+    bone_index2: int = 0
     weight2: float = 0
 
 @dataclass
