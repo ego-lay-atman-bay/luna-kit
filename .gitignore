@@ -159,4 +159,15 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
+.vscode/
 celestias-ark
+data
+files/
+reference/
+model/
+*.ark
+*.wav
+*.mpc
+*.flac
+*.dat
+*.pvr
