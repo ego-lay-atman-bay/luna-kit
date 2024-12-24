@@ -123,13 +123,29 @@ class RKFormat():
         materials: list[Material] = []
         
         for x in range(texture_info[1]):
-            name = read_ascii_string(file)
-            if name == '':
-                name = increment_name_num(materials[-1].name)
+            name = file.read(texture_info[2]//texture_info[1])
+            if b'\00' in name:
+                name = name[:name.index(b'\00')]
+            name = name.decode('ascii', errors = 'ignore')
+            # if name == '':
+            #     if len(materials) >= 2:
+            #         if materials[-1].name == materials[-2].name:
+            #             name = materials[-1].name
+            #         else:
+            #             name = increment_name_num(materials[-1].name)
+            #     else:
+            #         name = increment_name_num(materials[-1].name)
             rkm = os.path.join(
                 os.path.dirname(self.filename),
                 name + '.rkm',
             )
+            if not os.path.exists(rkm):
+                name = materials[-1].name
+                rkm = os.path.join(
+                    os.path.dirname(self.filename),
+                    name + '.rkm',
+                )
+                
             materials.append(Material(
                 name = name,
                 rkm = rkm,
