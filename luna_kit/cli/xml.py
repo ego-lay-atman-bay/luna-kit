@@ -52,6 +52,8 @@ class XMLCommand(CLICommand):
             encoding = 'utf-8'
             try:
                 encoding = charset_normalizer.from_path(file).best().encoding
+
+                encoding = encoding.replace('_', '-')
                 
                 with open(file, 'r', encoding = encoding) as file_in:
                     soup = BeautifulSoup(
