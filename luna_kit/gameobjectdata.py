@@ -1,6 +1,7 @@
 import os
-from typing import IO, Literal
 import warnings
+from collections import UserDict
+from typing import IO, Literal
 
 from lxml import etree
 
@@ -9,8 +10,80 @@ from lxml import etree
 from .utils import strToBool, strToFloat, strToInt
 
 
+class GameObject(UserDict):
+    def __init__(self, id: str, category: str, data: dict | None = None):
+        if data is None:
+            super().__init__()
+        else:
+            super().__init__(data)
+        
+        self.id = id
+        self.category = category
+    
+    def __repr__(self):
+        return f'<GameObject id={self.id} category={self.category}>'
+    
+    def keys(self):
+        return self.data.keys()
+    
+    def items(self):
+        return self.data.items()
+    
+    def values(self):
+        return self.data.values()
+
+class ShopItemCategory(UserDict):
+    def __init__(self, name: str, info: dict, items: 'dict[str, ShopItem] | None' = None):
+        if items is None:
+            super().__init__()
+        else:
+            super().__init__(items)
+        
+        self.name = name
+        self.info = info
+    
+    def __repr__(self):
+        return f'<ShopItemCategory name={self.name}>'
+    
+    def keys(self):
+        return self.data.keys()
+    
+    def items(self):
+        return self.data.items()
+    
+    def values(self):
+        return self.data.values()
+
+class ShopItem(UserDict):
+    def __init__(self, id: str, category: str, data: dict | None = None):
+        if data is None:
+            super().__init__()
+        else:
+            super().__init__(data)
+        
+        self.id = id
+        self.category = category
+    
+    def __repr__(self):
+        return f'<ShopItem id={self.id} category={self.category}>'
+    
+    def keys(self):
+        return self.data.keys()
+    
+    def items(self):
+        return self.data.items()
+    
+    def values(self):
+        return self.data.values()
+
+
 class GameObjectData(dict):
-    def __init__(self, file: str | IO, category_manifest: str | IO = None) -> None:
+    def __init__(
+        self,
+        file: str | IO,
+        shopdata: str | IO | None = None,
+        category_manifest: str | IO | None = None,
+    ) -> None:
         game_data_xml = etree.parse(file).getroot()
         if category_manifest is None:
             if isinstance(file, str):
@@ -21,10 +94,24 @@ class GameObjectData(dict):
             else:
                 raise FileNotFoundError('Cannot find category manifest')
         
+        
+        if shopdata is None:
+            if isinstance(file, str):
+                shopdata = os.path.join(
+                    os.path.dirname(file),
+                    'shopdata.xml',
+                )
+            else:
+                raise FileNotFoundError('Cannot find shopdata.xml')
+        
+        self.shopdata = {}
+        
         category_xml = etree.parse(category_manifest).getroot()
+        shopdata_xml = etree.parse(shopdata).getroot()
         
         self._parse_category_manifest(category_xml)
         self._parse_game_data(game_data_xml)
+        self._parse_shopdata(shopdata_xml)
 #         for element in game_xml:
 #             if element.tag == 'Category':
 #                 category = []
@@ -36,6 +123,9 @@ class GameObjectData(dict):
 #                         category.append(GameObject.from_category(child, category_name))
 
     CATEGORY_DATA: dict[str, dict[str, dict[Literal['optional', 'exclude', 'attributes'], bool | dict[str, dict[Literal['type', 'array_length', 'default', 'help'], str]]]]]
+
+    def __getitem__(self, key: str) -> dict[str, GameObject]:
+        return super().__getitem__(key)
 
     def _parse_category_manifest(self, manifest_xml: etree._Element):
         self.CATEGORY_DATA = {}
@@ -81,8 +171,7 @@ class GameObjectData(dict):
             
             category_data = {}
             category_name = category_xml.attrib['ID']
-            category_info = self.CATEGORY_DATA.get(category_name, {})
-            self[category_name] = category_data
+            category_info = self.CATEGORY_DATA.setdefault(category_name, {})
             
             self[category_name] = category_data
             
@@ -90,8 +179,11 @@ class GameObjectData(dict):
                 if game_object_xml.tag != 'GameObject':
                     continue
 
-                game_object_data = {}
                 object_id = game_object_xml.attrib['ID']
+                game_object_data = GameObject(
+                    id = object_id,
+                    category = category_name,
+                )
                 category_data[object_id] = game_object_data
                 
                 for parameter_name, parameter_info in category_info.items():
@@ -134,7 +226,25 @@ class GameObjectData(dict):
                                 )
                         
                         parameter_data[attribute_name] = attribute_data
-                                    
+    
+    def _parse_shopdata(self, shopdata: etree._Element):
+        self.shopdata.clear()
+        
+        for category_xml in shopdata:
+            if category_xml.tag != 'ShopItemCategory':
+                continue
+            
+            category_name = category_xml.attrib.get('Name')
+            category = ShopItemCategory(category_name, category_xml.attrib)
+            self.shopdata[category_name] = category
+
+            for item_xml in category_xml:
+                if item_xml.tag != 'ShopItem':
+                    continue
+                
+                item_id = item_xml.attrib.get('ID')
+                item = ShopItem(item_id, category_name, item_xml.attrib)
+                category[item_id] = item
                         
     def _parse_game_value(self, value: str, type: Literal['string', 'stringWithDefault', 'int', 'float', 'bool']):
         match type:
@@ -146,3 +256,12 @@ class GameObjectData(dict):
                 return strToFloat(value)
             case 'string' | 'stringWithDefault':
                 return str(value)
+
+    def get_object(self, id: str):
+        for objects in self.values():
+            if id in objects:
+                return objects[id]
+    def get_object_shopdata(self, id: str):
+        for objects in self.shopdata.values():
+            if id in objects:
+                return objects[id]
