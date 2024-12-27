@@ -1,5 +1,7 @@
 from argparse import ArgumentParser, Namespace
 from .cli import CLI, CLICommand
+from collections import UserDict
+
 
 @CLI.register_command
 class SheetCommand(CLICommand):
@@ -9,10 +11,55 @@ class SheetCommand(CLICommand):
     @classmethod
     def build_args(cls, parser: ArgumentParser):
         parser.add_argument(
+            '-g', '--game-object-data',
+            dest = 'game_object_data',
+            help = 'Path to gameobjectdata.xml file',
+            required = True,
+        )
+        
+        parser.add_argument(
+            '--category',
+            help = 'Game object category. You can find all the categories in `gameobjectcategorydata.xml`',
+        )
+        
+        parser.add_argument(
+            '-i', '--info',
+            dest = 'info',
+            nargs = '+',
+            help = 'The info to get. Example Name.Unlocal. If `shop:` is before the key, it will get the data from `shopdata.xml` instead of `gameobjectdata.xml`.'
+        )
+        
+        parser.add_argument(
+            '-c', '--columns',
+            dest = 'columns',
+            nargs = '+',
+            help = 'The names of each column mapping for data.'
+        )
+        
+        parser.add_argument(
+            '-d', '--delimiter',
+            dest = 'delimiter',
+            default = ', ',
+            help = 'Delimiter for lists.',
+        )
+        
+        parser.add_argument(
+            '-s', '--shop-data',
+            dest = 'shop_data',
+            help = 'Path to `shopdata.xml` file',
+            default = None,
+        )
+        
+        parser.add_argument(
+            '-l', '--loc', '--localization',
+            dest = 'loc',
+            help = '.loc file to get in-game text.',
+        )
+        
+        parser.add_argument(
             '-o', '--output',
             dest = 'output',
-            help = 'Output filename',
-            required = True,
+            help = 'Output filename. Will print to stdout if not specified.',
         )
         
         parser.add_argument(
@@ -22,119 +69,111 @@ class SheetCommand(CLICommand):
             default = 'json',
             help = 'Output format',
         )
-        
-        type = parser.add_subparsers(
-            title = 'type',
-            dest = 'type',
-        )
-        
-        # characters
-        characters = type.add_parser(
-            'characters',
-            description = 'Export a spreadsheet with all character info.',
-        )
-        
-        characters.add_argument(
-            '-g', '--game-object-data',
-            dest = 'game_object_data',
-            help = 'Path to gameobjectdata.xml file',
-            required = True,
-        )
-        
-        characters.add_argument(
-            '-s', '--shop-data',
-            dest = 'shop_data',
-            help = 'Path to shopdata.xml file',
-            required = True,
-        )
-        
-        characters.add_argument(
-            '-l', '--loc', '--localization',
-            dest = 'loc',
-            help = '.loc file to get in-game text.',
-        )
     
     @classmethod
     def run_command(cls, args: Namespace):
-        match args.type:
-            case 'characters':
-                from ..gameobjectdata import GameObjectData
-                from ..loc import LOC
-                from ..shopdata import ShopData
-                from ..constants import STAR_REWARDS, SPECIAL_AI
-                import json
+        from ..gameobjectdata import GameObjectData
+        from ..loc import LOC
+        from ..shopdata import ShopData
+        from ..constants import STAR_REWARDS, SPECIAL_AI
+        import json
+        import os
+        from itertools import zip_longest
+        
+        object_data = GameObjectData(
+            args.game_object_data,
+            shopdata = args.shop_data,
+        )
+        strings = {}
+        
+        if args.loc:
+            strings = LOC(args.loc).strings
+        
+        def translate(string: str):
+            return strings.get(string, string)
+        
+        def parse_key(info: str):
+            split = info.split(':')
+            key = split[-1].split('.')
+            extras = []
+            if len(split) > 1:
+                extras = split[:-1]
+            
+            return key, extras
+        
+        def get_items(items: list[str], value: dict | list):
+            if len(items) == 0:
+                return value
+            return get_items(items[1:], value[items[0]])
+        
+        def get_result(name, value):
+            result = {}
+            
+            if isinstance(value, (dict, UserDict)):
+                for key, v in value.items():
+                    new_name = f'{name}.{key}'
+                    result.update(get_result(new_name, v))
                 
-                object_data = GameObjectData(args.game_object_data)
-                shop_data = ShopData(args.shop_data)
-                strings = {}
-                
-                if args.loc:
-                    strings = LOC(args.loc).strings
-                
-                def translate(string: str):
-                    return strings.get(string, string)
-                
-                pony_shop = {pony.id: pony for pony in shop_data.categories['Pony'].items}
-                objects = object_data.categories['Pony']
+                return result
+            elif isinstance(value, list):
+                value = args.delimiter.join([str(i) for i in value])
+            elif isinstance(value, str):
+                value = translate(value)
+            
+            result[name] = value
+            
+            return result
+        
+        objects = object_data[args.category]
+        sheet = []
+        
 
-                sheet = []
-
-                for pony in objects:
-                    pony_data = {}
-                    
-                    shop = pony_shop.get(pony.id)
-                    
-                    pony_data['id'] = pony.id
-                    pony_data['name'] = translate(pony.name)
-                    pony_data['description'] = translate(pony.description)
-                    pony_data['icon'] = pony.icon
-                    pony_data['image'] = pony.image
-                    pony_data['shop'] = {
-                        'location': shop.map_zone if shop else None,
-                        'cost': shop.cost if shop else None,
-                        'currency': shop.currency_type if shop else None,
-                        'quest': shop.quest if shop else None,
-                        'sort_price': shop.sort_price if shop else None,
-                        'task_id': shop.task_token_id if shop else None,
-                        'unlock_value': shop.unlock_value if shop else None,
-                    }
-                    
-                    pony_data['arrival_xp'] = pony.arrival_xp
-                    pony_data['star_rewards'] = [{
-                        'reward': STAR_REWARDS.get(reward['reward'], reward['reward']),
-                        'amount': reward['amount'],
-                    } for reward in pony.star_rewards]
-                    pony_data['house'] = pony.house
-                    # pony_data['model'] = pony.model
-                    pony_data['arrival_notification'] = translate(pony.arrival_notification)
-                    pony_data['tracking_id'] = pony.tracking_id
-                    pony_data['ai'] = {
-                        'special_ai': SPECIAL_AI.get(pony.ai['special_ai'], SPECIAL_AI[0]),
-                        'at_max_level': pony.ai['at_max_level'],
-                    }
-                    pony_data['minigames'] = pony.minigames
-                    pony_data['changeling'] = pony.changeling
-                    pony_data['has_pets'] = pony.has_pets
-                    pony_data['is_pony'] = pony.is_pony
-                    pony_data['never_crystallize'] = pony.never_crystallize
-                    pony_data['never_shapeshift'] = pony.never_shapeshift
-                    pony_data['friends'] = pony.friends
-                    
-                    sheet.append(pony_data)
+        for object_id, object in objects.items():
+            object_info = {}
+            
+            info = None
+            
+            if args.info is not None:
+                info: list[str] = args.info
+                columns: list[str] = args.columns or []
                 
-                match args.format:
-                    case 'csv':
-                        table = []
-                        header = [
-                            'name',
-                            'description',
-                            'house',
-                            'location',
-                            'cost',
-                            'currency',
-                            'quest',
-                            
-                        ]
-                    case _: # json
-                        with open(args.output, 'w') as file:
-                            json.dump(sheet, file, indent = 2, ensure_ascii = False)
+                columns = columns[:len(info)]
+
+                for key, column in zip_longest(info, columns, fillvalue = None):
+                    keys, extras = parse_key(key)
+
+                    shopdata = None
+
+
+                    if 'shop' in extras:
+                        shopdata = object_data.get_object_shopdata(object_id)
+                        if shopdata is None:
+                            result = None
+                        else:
+                            result = get_items(keys, shopdata)
+                    else:
+                        result = get_items(keys, object)
+                    
+                    if column is None:
+                        column = '.'.join(keys)
+                    
+                    object_info.update(get_result(column, result))
+            else:
+                for column, value in object.items():
+                    object_info.update(get_result(column, value))
+            
+            sheet.append(object_info)
+                        
+            
+        os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok = True)
+        
+        match args.format:
+            case 'csv':
+                import csv
+                with open(args.output, 'w', newline = '', encoding = 'utf-8') as file:
+                    writer = csv.DictWriter(file, sheet[0].keys())
+                    writer.writeheader()
+                    writer.writerows(sheet)
+            case _: # json
+                with open(args.output, 'w', encoding = 'utf-8') as file:
+                    json.dump(sheet, file, indent = 2, ensure_ascii = False)
