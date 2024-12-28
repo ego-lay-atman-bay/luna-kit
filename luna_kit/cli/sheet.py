@@ -104,6 +104,8 @@ class SheetCommand(CLICommand):
         def get_items(items: list[str], value: dict | list):
             if len(items) == 0:
                 return value
+            if isinstance(value, (dict, UserDict)):
+                return get_items(items[1:], value.get(items[0]))
             return get_items(items[1:], value[items[0]])
         
         def get_result(name, value):
