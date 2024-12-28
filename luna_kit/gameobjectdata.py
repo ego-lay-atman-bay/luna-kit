@@ -19,6 +19,8 @@ class GameObject(UserDict):
         
         self.id = id
         self.category = category
+        self['id'] = self.id
+        self['category'] = self.category
     
     def __repr__(self):
         return f'<GameObject id={self.id} category={self.category}>'
