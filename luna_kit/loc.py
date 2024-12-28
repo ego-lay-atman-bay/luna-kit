@@ -3,7 +3,7 @@ import io
 import json
 import os
 import struct
-from typing import Annotated, BinaryIO
+from typing import BinaryIO
 
 from .file_utils import is_binary_file, is_text_file
 
