@@ -1,8 +1,8 @@
 import csv
+import dataclasses
 import os
 import struct
 from collections.abc import Mapping
-import dataclasses
 from dataclasses import dataclass
 from typing import Annotated, BinaryIO, Literal
 
@@ -13,7 +13,8 @@ import PIL.Image
 from . import enums
 from .file_utils import PathOrBinaryFile, open_binary
 from .pvr import PVR
-from .utils import read_ascii_string, strToBool, strToInt, strToFloat, increment_name_num
+from .utils import (increment_name_num, read_ascii_string, strToBool,
+                    strToFloat, strToInt)
 
 USHORT_MAX = 65535
 
@@ -88,8 +89,107 @@ class RKFormat():
             
             self.meshes = self._read_meshes(open_file)
     
-    def get_verts(self, mesh: 'Mesh'):
-        mesh.triangles
+    def create_dae(self, output: str | None = None):
+        import collada
+        import collada.source
+        
+        # for rk_material in self.materials:
+        #     map = collada.material.Map()
+        #     effect = collada.material.Effect(
+        #         rk_material.name,
+        #         [],
+        #         "phong",
+        #         double_sided = not rk_material.info.Cull,
+        #         reflective = (0,0,0,0)
+        #         transparency = 
+        #     )
+        
+        meshes = []
+        
+        verts = []
+        uvs = []
+        for vert in self.verts:
+            verts.extend([vert.x, vert.y, vert.z])
+            uvs.extend([vert.u, -vert.v])
+        
+        mesh = collada.Collada()
+
+        materials = []
+        
+        for rk_material in self.materials:
+            image = collada.material.CImage(f'image-{rk_material.info.DiffuseTexture}', f'{rk_material.info.DiffuseTexture}.png')
+            surface = collada.material.Surface(f'surface-{rk_material.info.DiffuseTexture}', image)
+            sampler2d = collada.material.Sampler2D(f'sampler-{rk_material.info.DiffuseTexture}', surface)
+            map = collada.material.Map(sampler2d, 'UVSET0')
+            effect = collada.material.Effect(
+                f"effect-{rk_material.name}",
+                [surface, sampler2d],
+                "lambert",
+                emission = (0.0, 0.0, 0.0, 1),
+                ambient=(0.0, 0.0, 0.0, 1),
+                diffuse = map,
+                transparent = map,
+                transparency = map,
+                double_sided = not rk_material.info.Cull,
+            )
+            mat = collada.material.Material(f"material-{rk_material.name}", rk_material.name, effect)
+            mesh.effects.append(effect)
+            mesh.materials.append(mat)
+            mesh.images.append(image)
+            materials.append(mat)
+        
+        geometry_nodes = []
+        
+        for rk_mesh in self.meshes:
+            vert_src = collada.source.FloatSource(f'verts-array-{rk_mesh.name}', numpy.array(verts), ('X', 'Y', 'Z'))
+            uv_src = collada.source.FloatSource(f'uvs-array-{rk_mesh.name}', numpy.array(uvs), ('S', 'T'))
+            
+            geometry = collada.geometry.Geometry(
+                mesh,
+                rk_mesh.name,
+                rk_mesh.name,
+                [vert_src, uv_src],
+                double_sided = False,
+            )
+            
+            input_list = collada.source.InputList()
+            input_list.addInput(0, 'VERTEX', f'#{vert_src.id}')
+            input_list.addInput(0, 'TEXCOORD', f'#{uv_src.id}')
+            indices = []
+            for tri in rk_mesh.triangles:
+                indices.extend([tri.index1, tri.index2, tri.index3])
+            triset = geometry.createTriangleSet(numpy.array(indices), input_list, f'materialRef-{rk_mesh.material}')
+
+            geometry.primitives.append(triset)
+            mesh.geometries.append(geometry)
+            
+            matnode = collada.scene.MaterialNode(f"materialref-{rk_mesh.material}", materials[rk_mesh.material_index], inputs=[])
+
+            geometry_nodes.append(collada.scene.GeometryNode(
+                geometry,
+                [matnode],
+            ))
+        
+        node = collada.scene.Node(f'node-{self.name}', children = geometry_nodes)
+            
+        
+        scene = collada.scene.Scene('scene', [node])
+
+        mesh.scenes.append(scene)
+        mesh.scene = scene
+
+        if output == None:
+            output = self.name + '.dae'
+        
+        output_folder = os.path.dirname(output)
+
+        os.makedirs(output_folder, exist_ok = True)
+
+        mesh.write(output)
+        for material in self.materials:
+            material.info.image.save(os.path.join(output_folder, material.info.DiffuseTexture + '.png'))
+        
+        return
     
     def _read_header(self, file: BinaryIO):
         header: Header = Header.from_packed(
