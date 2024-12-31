@@ -171,3 +171,11 @@ model/
 *.flac
 *.dat
 *.pvr
+
+# only include the project files (hopefully this will keep me from accidentally pushing the wrong files)
+**/*
+!LICENSE
+!README.md
+!luna_kit/
+!pyproject.toml
+!requirements.txt
