@@ -139,6 +139,7 @@ class ARK():
         return deepcopy(self._files)
     
     def __enter__(self):
+        self.load()
         return self
     
     def load(self):
