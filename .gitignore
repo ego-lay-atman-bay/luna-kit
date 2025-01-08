@@ -176,6 +176,6 @@ model/
 **/*
 !LICENSE
 !README.md
-!luna_kit/
+!luna_kit/**
 !pyproject.toml
 !requirements.txt
