@@ -338,6 +338,8 @@ class ARK():
             elif self.header.ark_version == 3:
                 file_data = self._decompresser.decompress(file_data, metadata.original_filesize)
         
+        file_data = file_data[:metadata.original_filesize]
+        
         if hashlib.md5(file_data).hexdigest() != metadata.md5sum.hex():
             warnings.warn(f'file "{posix_path(os.path.join(metadata.pathname, metadata.filename))}" hash does not match "{metadata.md5sum.hex()}"')
         
