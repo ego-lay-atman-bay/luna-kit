@@ -1,6 +1,7 @@
 import contextlib
 import hashlib
 import io
+import logging
 import os
 import struct
 import sys
@@ -17,8 +18,8 @@ import dataclasses_struct as dcs
 import zstandard
 
 from . import enums, types, xxtea
-from .file_utils import (PathOrBinaryFile, is_binary_file, is_text_file,
-                         open_binary, get_filesize)
+from .file_utils import (PathOrBinaryFile, get_filesize, is_binary_file,
+                         is_text_file, open_binary)
 from .utils import posix_path, read_ascii_string, trailing_slash
 
 
@@ -165,13 +166,13 @@ class ARK():
             raise TypeError('cannot open file')
     
     def close(self):
+        logging.debug('closing file')
         if self.__close_file:
             if not self.__open_file.closed:
                 self.__open_file.close()
         self.__close_file = False
     
     def __del__(self):
-        print('closing file')
         self.close()
     
     def read(self, file: BinaryIO):
