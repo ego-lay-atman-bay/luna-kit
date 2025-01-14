@@ -1,6 +1,7 @@
 import os
 import pathlib
-from typing import BinaryIO
+from itertools import groupby
+from typing import BinaryIO, Iterable
 
 import PIL.IcnsImagePlugin
 import PIL.ImageChops
@@ -83,3 +84,10 @@ def increment_name_num(name: str, amount: int = 1):
         )
     else:
         return name
+
+def split_into_chunks(value: Iterable, n: int = 2):
+    result = []
+    for idx, chunk in groupby(enumerate(value), key=lambda x: x[0]//n):
+        result.append([v for _, v in chunk])
+    
+    return result
