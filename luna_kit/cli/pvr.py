@@ -1,7 +1,10 @@
-from .cli import CLI, CLICommand
-from ._actions import GlobFiles
+from rich import progress
 
 from ..console import console
+from ._actions import GlobFiles
+from .cli import CLI, CLICommand
+
+
 @CLI.register_command
 class PVRCommand(CLICommand):
     COMMAND = "pvr"
@@ -53,11 +56,13 @@ class PVRCommand(CLICommand):
     @classmethod
     def run_command(cls, args):
         import os
+
         from ..pvr import PVR
-        from ..utils import get_PIL_format, strToBool
         from ..safe_format import safe_format
+        from ..utils import get_PIL_format, strToBool
         
         def save_image(file: str, ):
+            console.print(f'reading [yellow]{file}[/]')
             pvr = PVR(file)
             output = args.output
             name = os.path.splitext(os.path.basename(file))[0]
@@ -97,6 +102,8 @@ class PVRCommand(CLICommand):
                     format = format.lower(),
                 )
                 
+                # console.print(f'saving [yellow]{output}[/]')
+                
                 dir = os.path.dirname(output)
                 if dir:
                     os.makedirs(os.path.dirname(output), exist_ok = True)
@@ -120,6 +127,11 @@ class PVRCommand(CLICommand):
                 
             
         
-        for file in args.files:
+        for file in progress.track(
+            args.files,
+            description = 'saving...',
+            console = console,
+            
+        ):
             save_image(file)
         
