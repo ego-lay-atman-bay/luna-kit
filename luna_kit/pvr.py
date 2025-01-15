@@ -1,37 +1,73 @@
-from typing import BinaryIO, Annotated
+import struct
+import warnings
+from typing import Annotated, BinaryIO
 
-import astc_encoder.pil_codec
 import dataclasses_struct as dcs
+import texture2ddecoder
 from PIL import Image
 
 from .file_utils import PathOrBinaryFile, open_binary
 
+
 @dcs.dataclass()
 class Header:
     magic: Annotated[bytes, 4] = b'PVR\x03'
-    unknown1: dcs.U32 = 0
+    flags: dcs.U32 = 0
     format: dcs.U32 = 0
-    unknown2: dcs.U32 = 0
-    unknown3: dcs.U32 = 0
-    unknown4: dcs.U32 = 0
-    width: dcs.U32 = 0
+    extra_fmt: dcs.U32 = 0
+    color_space: dcs.U32 = 0
+    channel_type: dcs.U32 = 0
     height: dcs.U32 = 0
+    width: dcs.U32 = 0
+    depth: dcs.U32 = 0
+    num_surfaces: dcs.U32 = 0
+    num_faces: dcs.U32 = 0
+    mip_map_count: dcs.U32 = 0
+    metadata_size: dcs.U32 = 0
+
+@dcs.dataclass()
+class MetadataHeader:
+    fourCC: Annotated[bytes, 4] = b'PVR0'
+    key: dcs.U32 = 0
+    data_size: dcs.U32 = 0
 
 class PVR:
     MAGIC: bytes = b'PVR\x03'
     
     def __init__(self, file: PathOrBinaryFile | None = None) -> None:
-        self.header = Header()
-        self.filename = ''
+        self.header: Header = Header()
+        self.filename: str = ''
+        self.metadata_header: MetadataHeader = MetadataHeader()
+        self.metadata = {}
+        self.metadata_block = b''
         
         self.image: Image.Image | None = None
 
         if file is not None:
             self.read(file)
     
+    @property
+    def premultiplied(self):
+        return self.header.flags == 2
+    
+    @property
+    def width(self):
+        if self.image is None:
+            return self.header.width
+        return self.image.width
+    
+    @property
+    def height(self):
+        if self.image is None:
+            return self.header.height
+        return self.image.height
+    
     def read(self, file: PathOrBinaryFile):
         self.header = Header()
         self.filename = ''
+        self.metadata_header = MetadataHeader()
+        self.metadata = {}
+        self.metadata_block = b''
         
         self.image = None
         
@@ -40,7 +76,7 @@ class PVR:
                 self.filename = file
             
             self.header = self._read_header(open_file)
-
+            self._read_metadata(open_file)
             self.image = self._read_image(open_file)
     
     def _read_header(self, file: BinaryIO):
@@ -52,22 +88,66 @@ class PVR:
         
         return header
     
-    def _read_image(self, file: BinaryIO = None):
+    def _read_metadata(self, file: BinaryIO):
+        if self.header.metadata_size == 0:
+            return
+        
+        self.metadata_header = MetadataHeader.from_packed(
+            file.read(dcs.get_struct_size(MetadataHeader))
+        )
+        
+        self.metadata_block = file.read(self.metadata_header.data_size)
+        
+        if self.metadata_header.fourCC == b'PVR\x03':
+            match self.metadata_header.key:
+                case 3:
+                    self.metadata = {k:v for k,v in zip(['x', 'y', 'z'], struct.unpack('3?', self.metadata_block))}
+                case _:
+                    warnings.warn(f'metadata key "{self.metadata_header.key}" not recognized')
+        else:
+            warnings.warn(f'metadata identifier "{self.metadata_header.fourCC}" not recognized')
+        
+        
+    
+    def _read_image(self, file: BinaryIO):
         image = None
         
-        if self.header.format == 34:
-            file.seek(67)
-            image = Image.frombytes(
-                "RGBA",
-                (self.header.width, self.header.height),
-                file.read(),
-                "astc",
-                (1, 8, 8),
-            )
-        elif self.header.format == 6:
-            raise NotImplemented('ETC format is not implemented yet')
-        else:
-            raise NotImplemented(f'Format {self.header.format} not implemented')
+        file.seek(dcs.get_struct_size(Header) + self.header.metadata_size)
+        self.image_data = file.read()
+
+        # texture2ddecoder: https://github.com/K0lb3/texture2ddecoder?tab=readme-ov-file#functions
+        # pvr formats: https://docs.imgtec.com/specifications/pvr-file-format-specification/html/topics/pvr-header-format.html#pixel-format-unsigned-64-bit-integer
+        
+        match self.header.format:
+            case 34:
+                decoded_bytes = texture2ddecoder.decode_astc(
+                    self.image_data,
+                    self.header.width,
+                    self.header.height,
+                    8, 8,
+                )
+                image = Image.frombytes(
+                    "RGBA",
+                    (self.header.width, self.header.height),
+                    decoded_bytes,
+                    "raw",
+                    ('BGRA'),
+                )
+            case 6:
+                decoded_bytes = texture2ddecoder.decode_etc1(
+                    self.image_data,
+                    self.header.width,
+                    self.header.height,
+                )
+                image = Image.frombytes(
+                    "RGBA",
+                    (self.header.width, self.header.height),
+                    decoded_bytes,
+                    "raw",
+                    ('BGRA'),
+                )
+            case _:
+                raise NotImplementedError(f'Format {self.header.format} not implemented')
         
         return image
     

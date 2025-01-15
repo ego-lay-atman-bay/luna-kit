@@ -17,17 +17,18 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-  "rich",
   "zstandard",
   "dataclasses-struct",
   "Pillow",
   "lxml",
-  "astc-encoder-py",
+  # "astc-encoder-py",
+  "texture2ddecoder",
   "numpy",
   "charset-normalizer",
   "beautifulsoup4",
   "vxn-py",
   "filetype",
+  "rich",
 ]
 dynamic = ["version"]
 
