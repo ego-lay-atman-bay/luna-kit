@@ -12,6 +12,7 @@ from collections.abc import Callable, Iterable, Iterator
 from copy import copy, deepcopy
 from ctypes import *
 from dataclasses import dataclass
+from datetime import datetime
 from typing import IO, Annotated, Any, BinaryIO, Literal, NamedTuple
 
 import dataclasses_struct as dcs
@@ -66,7 +67,14 @@ class FileMetadata:
         return self.encrypted_nbytes or self.compressed_size
     
     def __post_init__(self):
+        
         self.__save_original()
+    
+    timestamp_multiplier = 13508
+        
+    @property
+    def date(self):
+        return datetime.fromtimestamp(self.timestamp * self.timestamp_multiplier)
         
     def __save_original(self):
         self._filename = self.filename
@@ -350,6 +358,7 @@ class ARK():
             encrypted = encrypted,
             compressed = compressed,
             priority = metadata.priority,
+            date = metadata.date,
         )
     
     def _write_file(self, data: bytes, metadata: FileMetadata, file: BinaryIO):
@@ -460,6 +469,7 @@ class ARKFile():
         compressed: bool = True,
         encrypted: bool = False,
         priority: int = 0,
+        date: datetime | None = None,
     ) -> None:
         """File inside `.ark` file.
 
@@ -474,6 +484,9 @@ class ARKFile():
         self.encrypted = encrypted
         
         self.priority = priority
+        if date is None:
+            date = datetime.now()
+        self.date = date
     
     @property
     def filename(self) -> str:
@@ -526,6 +539,12 @@ class ARKFile():
         
         with open(path, 'wb') as file:
             file.write(self.data)
+        
+        
+        if self.date > datetime.now():
+            logging.debug(f'{self.fullpath} date {self.date} is after today {datetime.now()}')
+        
+        os.utime(path, (self.date.timestamp(),) * 2)
     
     def pack(self) -> tuple[bytes, FileMetadata]:
         result = self.data
