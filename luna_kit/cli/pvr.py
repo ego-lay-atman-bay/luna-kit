@@ -66,10 +66,12 @@ class PVRCommand(CLICommand):
             pvr = PVR(file)
             output = args.output
             name = os.path.splitext(os.path.basename(file))[0]
+            dir = os.path.dirname(file)
             if output:
                 output = safe_format(
                     output,
                     name = name,
+                    dir = dir,
                 )
                 if output == args.output:
                     if len(args.files) > 1:
