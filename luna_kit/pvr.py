@@ -3,6 +3,7 @@ import warnings
 from typing import Annotated, BinaryIO
 
 import dataclasses_struct as dcs
+import numpy
 import texture2ddecoder
 from PIL import Image
 
@@ -13,8 +14,8 @@ from .file_utils import PathOrBinaryFile, open_binary
 class Header:
     magic: Annotated[bytes, 4] = b'PVR\x03'
     flags: dcs.U32 = 0
-    format: dcs.U32 = 0
-    extra_fmt: dcs.U32 = 0
+    format: Annotated[bytes, 4] = b'\x00' * 4
+    channel_bit_rates: Annotated[bytes, 4] = b'\x00' * 4
     color_space: dcs.U32 = 0
     channel_type: dcs.U32 = 0
     height: dcs.U32 = 0
@@ -117,37 +118,55 @@ class PVR:
 
         # texture2ddecoder: https://github.com/K0lb3/texture2ddecoder?tab=readme-ov-file#functions
         # pvr formats: https://docs.imgtec.com/specifications/pvr-file-format-specification/html/topics/pvr-header-format.html#pixel-format-unsigned-64-bit-integer
-        
-        match self.header.format:
-            case 34:
-                decoded_bytes = texture2ddecoder.decode_astc(
-                    self.image_data,
-                    self.header.width,
-                    self.header.height,
-                    8, 8,
-                )
+
+        channel_bit_rates = struct.unpack('4B', self.header.channel_bit_rates)
+
+        if sum(channel_bit_rates) > 0:
+            channel_order = tuple(c.decode() for c in struct.unpack('4c', self.header.format))
+            if channel_order == ('r', 'g', 'b', 'a') and channel_bit_rates == (8,8,8,8):
                 image = Image.frombytes(
-                    "RGBA",
+                    'RGBA',
                     (self.header.width, self.header.height),
-                    decoded_bytes,
-                    "raw",
-                    ('BGRA'),
-                )
-            case 6:
-                decoded_bytes = texture2ddecoder.decode_etc1(
                     self.image_data,
-                    self.header.width,
-                    self.header.height,
+                    'raw',
+                    'RGBA',
                 )
-                image = Image.frombytes(
-                    "RGBA",
-                    (self.header.width, self.header.height),
-                    decoded_bytes,
-                    "raw",
-                    ('BGRA'),
-                )
-            case _:
-                raise NotImplementedError(f'Format {self.header.format} not implemented')
+            else:
+                
+                raise NotImplementedError(f'format is not supported {"".join(channel_order)}{"".join([str(c) for c in channel_bit_rates])}')
+        else:
+            format = struct.unpack('I', self.header.format)[0]
+            
+            match format:
+                case 34:
+                    decoded_bytes = texture2ddecoder.decode_astc(
+                        self.image_data,
+                        self.header.width,
+                        self.header.height,
+                        8, 8,
+                    )
+                    image = Image.frombytes(
+                        "RGBA",
+                        (self.header.width, self.header.height),
+                        decoded_bytes,
+                        "raw",
+                        ('BGRA'),
+                    )
+                case 6:
+                    decoded_bytes = texture2ddecoder.decode_etc1(
+                        self.image_data,
+                        self.header.width,
+                        self.header.height,
+                    )
+                    image = Image.frombytes(
+                        "RGBA",
+                        (self.header.width, self.header.height),
+                        decoded_bytes,
+                        "raw",
+                        ('BGRA'),
+                    )
+                case _:
+                    raise NotImplementedError(f'Format {self.header.format} not implemented')
         
         return image
     
