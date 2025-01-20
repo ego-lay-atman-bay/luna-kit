@@ -62,6 +62,8 @@ class FileMetadata:
     timestamp: int
     md5sum: bytes
     priority: int
+    
+    ark_version: int = 3
 
     @property
     def actual_size(self):
@@ -75,7 +77,10 @@ class FileMetadata:
         
     @property
     def date(self):
-        return datetime.fromtimestamp(self.timestamp * self.timestamp_multiplier)
+        if self.ark_version == 1:
+            return datetime.fromtimestamp(self.timestamp)
+        elif self.ark_version == 3:
+            return datetime.fromtimestamp(self.timestamp * self.timestamp_multiplier)
         
     def __save_original(self):
         self._filename = self.filename
@@ -328,6 +333,8 @@ class ARK():
                 timestamp = file_result.timestamp,
                 md5sum = bytes.fromhex(file_result.md5sum.hex()),
                 priority = file_result.priority,
+                
+                ark_version = self.header.ark_version,
             ))
 
         return result
