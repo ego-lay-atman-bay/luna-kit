@@ -39,6 +39,13 @@ class ARKParser(CLICommand):
             action = 'store_true',
             help = 'ignore errors',
         )
+        
+        parser.add_argument(
+            '-v', '--data-version',
+            dest = 'data_version',
+            action = 'store_true',
+            help = 'print data version from ark files',
+        )
     
     @classmethod
     def run_command(cls, args: Namespace):
@@ -83,9 +90,16 @@ class ARKParser(CLICommand):
             
             return failed
         
+        versions = {}
+        
         if len(files) == 1:
-            with ARK(args.files[0]) as ark_file:
-                failed = extract_all(ark_file, output)
+            with ARK(files[0]) as ark_file:
+                if args.data_version:
+                    version = ark_file.data_version
+                    if version:
+                        versions[files[0]] = version
+                if not args.data_version or args.output:
+                    failed = extract_all(ark_file, output)
         else:
             failed: dict[str, list[str]] = {}
             for filename in files:
@@ -97,11 +111,25 @@ class ARKParser(CLICommand):
                 
                 
                 with ARK(filename) as ark_file:
-                    failed[filename] = extract_all(ark_file, path)
-                
+                    if args.data_version:
+                        version = ark_file.data_version
+                        if version:
+                            versions[filename] = version
+                    if not args.data_version or args.output:
+                        failed[filename] = extract_all(ark_file, path)
+            
             if len(failed) > 0:
                 for arkfile, files in failed.items():
                     for file in files:
                         console.print(f'[red]failed to extract {file} from {arkfile}')
-                
+
+        if args.data_version:
+            if len(versions):
+                if len(versions) == 1:
+                    console.print(list(versions.values())[0])
+                else:
+                    for filename, version in versions.items():
+                        console.print(f'{os.path.basename(filename)}: {version}')
+            else:
+                console.print("[red]could not find version[/]")
                         

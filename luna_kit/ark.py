@@ -17,6 +17,7 @@ from typing import IO, Annotated, Any, BinaryIO, Literal, NamedTuple
 
 import dataclasses_struct as dcs
 import zstandard
+from lxml import etree
 
 from . import enums, types, xxtea
 from .file_utils import (PathOrBinaryFile, get_filesize, is_binary_file,
@@ -146,6 +147,19 @@ class ARK():
     @property
     def files(self):
         return deepcopy(self._files)
+    
+    @property
+    def data_version(self):
+        if 'data_ver.xml' not in self._files:
+            return
+        
+        file = self.read_file(self._files['data_ver.xml'])
+
+        tree = etree.parse(io.BytesIO(file.data))
+        if tree is None:
+            return
+        root = tree.getroot()
+        return root.attrib.get('Value')
     
     def __enter__(self):
         self.load()
