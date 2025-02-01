@@ -28,18 +28,10 @@ class XMLCommand(CLICommand):
             help = 'Format xml files',
         )
         
-        parser.add_argument(
-            '-i', '--indent',
-            dest = 'indent',
-            help = 'Formatted indent level. Default to 4',
-            default = 4,
-            type = int,
-        )
-        
     @classmethod
     def run_command(cls, args: Namespace):
         from lxml import etree
-        from bs4 import BeautifulSoup
+        from ..xml import parse_xml, tostring
         
         files = []
         
@@ -48,29 +40,44 @@ class XMLCommand(CLICommand):
         
         for file in files:
             console.print(f'Formatting [yellow]{file}[/yellow]')
-            soup = None
+            root = []
             encoding = 'utf-8'
             try:
-                encoding = charset_normalizer.from_path(file).best().encoding
-
-                encoding = encoding.replace('_', '-')
-                
-                with open(file, 'r', encoding = encoding) as file_in:
-                    soup = BeautifulSoup(
-                        file_in.read(),
-                        'xml',
-                        from_encoding = encoding,
-                    )
+                root, encoding = parse_xml(file, with_encoding = True)
             except Exception as e:
                 e.add_note(f'file unable to read: {file}')
                 raise e
             
-            if soup is not None:
+            if len(root):
                 with open(file, 'wb') as file_out:
-                    file_out.write(soup.encode(
+                    file_out.write(tostring(
+                        root,
+                        xml_declaration = True,
                         encoding = encoding,
-                        indent_level = 4,
+                        pretty_print = args.format,
                     ))
+                    # for index, child in enumerate(root):
+                    #     if isinstance(child, str):
+                    #         continue
+                    #     xml_string = etree.tostring(
+                    #         child,
+                    #         xml_declaration = index == 0,
+                    #         encoding = encoding,
+                    #         pretty_print = args.format,
+                    #         with_tail = False,
+                    #     )
+                    #     file_out.write(
+                    #         xml_string
+                    #     )
             else:
                 console.print(f'[yellow]failed to format {file}[/yellow]')
+            
+            # if soup is not None:
+            #     with open(file, 'wb') as file_out:
+            #         file_out.write(soup.encode(
+            #             encoding = encoding,
+            #             indent_level = 4,
+            #         ))
+            # else:
+            #     console.print(f'[yellow]failed to format {file}[/yellow]')
     

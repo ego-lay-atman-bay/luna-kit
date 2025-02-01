@@ -25,6 +25,9 @@ def is_text_file(file: IO):
 def is_binary_file(file: IO):
     return isinstance(file, (io.RawIOBase, io.BufferedIOBase))
 
+def is_file_like(file: IO):
+    return isinstance(file, io.IOBase)
+
 def get_filesize(file: IO):
     pos = file.tell()
     file.seek(0, os.SEEK_END)
@@ -34,6 +37,7 @@ def get_filesize(file: IO):
 
 PathOrBinaryFile: TypeAlias = str | bytes | bytearray | BinaryIO
 PathOrTextFile: TypeAlias = str | TextIO
+PathOrFile: TypeAlias = PathOrBinaryFile | PathOrTextFile
 
 class BinaryReader():
     pass
