@@ -8,11 +8,13 @@ from typing import BinaryIO
 from .file_utils import is_binary_file, is_text_file
 
 class LOC():
-    def __init__(self, file: str | bytes | bytearray | BinaryIO) -> None:
+    def __init__(self, file: str | bytes | bytearray | BinaryIO = None) -> None:
         self.string_count = 0
         self.filename = ''
+        self.strings = {}
         
-        self.read(file)
+        if file is not None:
+            self.read(file)
 
     def read(self, file: str | bytes | bytearray | BinaryIO):
         self.filename = ''
