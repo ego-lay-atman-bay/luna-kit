@@ -23,7 +23,7 @@ class GameObject(UserDict):
         self['category'] = self.category
     
     def __repr__(self):
-        return f'<GameObject id={self.id} category={self.category}>'
+        return f'<{self.__class__.__name__} id={self.id} category={self.category}>'
     
     def keys(self):
         return self.data.keys()
@@ -190,9 +190,9 @@ class GameObjectData(dict):
                 
                 for parameter_name, parameter_info in category_info.items():
                     parameter_xml = game_object_xml.find(parameter_name)
-                    if parameter_xml is None:
-                        if not parameter_info['optional'] and not parameter_info['exclude']:
-                            warnings.warn(f'parameter {parameter_name} on {object_id} in category {category_name} is not optional')
+                    # if parameter_xml is None:
+                    #     if not parameter_info['optional'] and not parameter_info['exclude']:
+                    #         warnings.warn(f'parameter {parameter_name} on {object_id} in category {category_name} is not optional')
                         
                     parameter_data = {}
                     
@@ -259,11 +259,11 @@ class GameObjectData(dict):
             case 'string' | 'stringWithDefault':
                 return str(value)
 
-    def get_object(self, id: str):
+    def get_object(self, id: str) -> GameObject | None:
         for objects in self.values():
             if id in objects:
                 return objects[id]
-    def get_object_shopdata(self, id: str):
+    def get_object_shopdata(self, id: str) -> GameObject | None:
         for objects in self.shopdata.values():
             if id in objects:
                 return objects[id]
