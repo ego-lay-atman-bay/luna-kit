@@ -3,15 +3,19 @@ import io
 import json
 import os
 import struct
+from collections import UserDict
 from typing import BinaryIO
 
 from .file_utils import is_binary_file, is_text_file
 
-class LOC():
+
+class LOC(UserDict):
     def __init__(self, file: str | bytes | bytearray | BinaryIO = None) -> None:
-        self.string_count = 0
+        super().__init__()
+        
+        self._string_count = 0
         self.filename = ''
-        self.strings = {}
+        self.strings = self.data
         
         if file is not None:
             self.read(file)
@@ -31,15 +35,15 @@ class LOC():
         else:
             raise TypeError('cannot open file')
 
-        self.strings = {}
+        self.data.clear()
         
         with context_manager as open_file:
             self.__read_header(open_file)
 
-            for x in range(self.string_count):
+            for x in range(self._string_count):
                 key = self.__read_key(open_file)
                 value = self.__read_value(open_file)
-                self.strings[key] = value
+                self.data[key] = value
     
     def export(self, filename: str | None = None, **kwargs):
         """Export strings to a json file. Extra keyword arguments are passed into `json.dump()`, so you can do `.export('file.json', indent = 2)`.
@@ -58,7 +62,7 @@ class LOC():
             json.dump(self.strings, file, **kwargs)
     
     def __read_header(self, file: BinaryIO):
-        self.string_count = struct.unpack('I',file.read(4))[0]
+        self._string_count = struct.unpack('I',file.read(4))[0]
     
     def __read_key(self, file: BinaryIO):
         """Read the string key from the file. This assumes that the current position in the file object is on the key length.
@@ -97,3 +101,26 @@ class LOC():
         value = file.read(length * 2)
         
         return value.decode('utf-16')
+
+    def translate(self, key: str):
+        return self.data.get(key, key)
+    
+    @property
+    def language(self):
+        return self.data.get('DEV_ID')
+    
+    @property
+    def string_count(self):
+        return len(self.data)
+
+    def keys(self):
+        return self.data.keys()
+    
+    def values(self):
+        return self.data.values()
+    
+    def items(self):
+        return self.data.items()
+    
+    def __repr__(self):
+        return f'<{self.__class__.__name__} language={repr(self.language)} string_count={repr(self.string_count)}>'
