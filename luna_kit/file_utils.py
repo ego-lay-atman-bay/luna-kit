@@ -59,7 +59,9 @@ def open_binary(file: PathOrBinaryFile, mode = 'r') -> BinaryIO:
     if 'b' not in mode:
         mode += 'b'
     
-    if isinstance(file, str) and os.path.isfile(file):
+    if 'r' in mode and isinstance(file, str) and os.path.isfile(file):
+        context_manager = open(file, mode)
+    elif ('w' in mode or 'a' in mode) and isinstance(file, str):
         context_manager = open(file, mode)
     elif isinstance(file, (bytes, bytearray)):
         context_manager = io.BytesIO(file)
@@ -86,8 +88,10 @@ def open_text_file(file: PathOrTextFile, mode = 'r') -> TextIO:
     Returns:
         BinaryIO: File-like object. Note: if a file-like object was passed in, `.__exit__()` will not do anything.
     """
-    if isinstance(file, str) and os.path.isfile(file):
-        context_manager = open(file, 'r')
+    if 'r' in mode and isinstance(file, str) and os.path.isfile(file):
+        context_manager = open(file, mode)
+    elif ('w' in mode or 'a' in mode) and isinstance(file, str):
+        context_manager = open(file, mode)
     elif isinstance(file, str):
         context_manager = io.StringIO(file)
     elif is_text_file(file):

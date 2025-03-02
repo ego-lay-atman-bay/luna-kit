@@ -25,10 +25,14 @@ dependencies = [
   "texture2ddecoder",
   "numpy",
   "charset-normalizer",
-  "beautifulsoup4",
+  # "beautifulsoup4",
   "vxn-py",
   "filetype",
   "rich",
+  "pyquaternion",
+  "pygltflib",
+  # "quaternionic",
+  "scipy",
 ]
 dynamic = ["version"]
 

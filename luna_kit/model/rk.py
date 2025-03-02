@@ -1,5 +1,7 @@
 import csv
 import dataclasses
+import io
+import math
 import os
 import struct
 from collections.abc import Mapping
@@ -9,22 +11,31 @@ from typing import Annotated, BinaryIO, Literal
 import dataclasses_struct as dcs
 import numpy
 import PIL.Image
+# import quaternion
+# from pyquaternion import Quaternion
 
-from . import enums
-from .file_utils import PathOrBinaryFile, open_binary
-from .pvr import PVR
-from .utils import (increment_name_num, read_ascii_string, strToBool,
-                    strToFloat, strToInt)
-
-USHORT_MAX = 65535
+from .. import enums
+from ..file_utils import PathOrBinaryFile, open_binary
+from ..pvr import PVR
+from ..utils import (increment_name_num, read_ascii_string, split_list,
+                     strToBool, strToFloat, strToInt)
+from .anim import Anim
+from .model_common import USHORT_MAX, Vector3, Vector4, decompose_bone_matrix
 
 
 @dcs.dataclass()
-class Header():
+class Header:
     magic: Annotated[bytes, 8] = b'RKFORMAT'
     unknown1: dcs.U32 = 0
     unknown2: dcs.U32 = 0
     name: Annotated[bytes, 64] = b' ' * 64
+
+@dataclass
+class SectionHeader:
+    tag: enums.rk.Tag
+    offset: int
+    count: int
+    byte_length: int
 
 def parse_rkm(filename: str):
     with open(filename, 'r', newline = '') as file:
@@ -35,11 +46,11 @@ def parse_rkm(filename: str):
         **dict(data),
     )
 
-class RKFormat():
+class RKModel:
     MAGIC = b'RKFORMAT'
     
     header: Header
-    info: Mapping[enums.rk.Info, tuple[int, int, int]]
+    section_headers: Mapping[enums.rk.Tag, SectionHeader]
 
     
     def __init__(self, file: PathOrBinaryFile = None) -> None:
@@ -47,7 +58,7 @@ class RKFormat():
 
         self.header = Header()
         self.name = ''
-        self.info: Mapping[enums.rk.Info, tuple[int, int, int]] = {}
+        self.section_headers = {}
         self.materials: list[Material] = []
         self.bones: list[Bone] = []
         self.materials: list[Material] = []
@@ -55,6 +66,7 @@ class RKFormat():
         self.submeshes: list[Submesh] = []
         self.verts: list[Vert] = []
         self.meshes: list[Mesh] = []
+        self.animation: Anim | None = None
         
         if file is not None:
             self.read(file)
@@ -64,7 +76,7 @@ class RKFormat():
 
         self.header = Header()
         self.name = ''
-        self.info = {}
+        self.section_headers = {}
         self.materials = []
         self.bones = []
         self.materials = []
@@ -78,21 +90,24 @@ class RKFormat():
                 self.filename = file
             
             self.header = self._read_header(open_file)
-            self.info = self._read_info(open_file)
-            self.materials = self._read_materials(open_file)
+            self.section_headers = self._read_sections_header(open_file)
             self.attributes = self._read_attributes(open_file)
+            self.materials = self._read_materials(open_file)
             self.submeshes = self._read_submesh_info(open_file)
-            self.verts = self._read_verts(open_file)
             self.bones = self._read_bones(open_file)
 
+            self.verts = self._read_verts(open_file)
             self._read_indexes_and_weights(open_file)
-            
             self.meshes = self._read_meshes(open_file)
+            
+        
+    def load_animation(self, file: PathOrBinaryFile):
+        self.animation = Anim(file)
     
     def create_dae(self, output: str | None = None):
         import collada
         import collada.source
-        
+
         # for rk_material in self.materials:
         #     map = collada.material.Map()
         #     effect = collada.material.Effect(
@@ -117,9 +132,9 @@ class RKFormat():
         materials = []
         
         for rk_material in self.materials:
-            image = collada.material.CImage(f'image-{rk_material.info.DiffuseTexture}', f'{rk_material.info.DiffuseTexture}.png')
-            surface = collada.material.Surface(f'surface-{rk_material.info.DiffuseTexture}', image)
-            sampler2d = collada.material.Sampler2D(f'sampler-{rk_material.info.DiffuseTexture}', surface)
+            image = collada.material.CImage(f'image-{rk_material.properties.DiffuseTexture}', f'{rk_material.properties.DiffuseTexture}.png')
+            surface = collada.material.Surface(f'surface-{rk_material.properties.DiffuseTexture}', image)
+            sampler2d = collada.material.Sampler2D(f'sampler-{rk_material.properties.DiffuseTexture}', surface)
             map = collada.material.Map(sampler2d, 'UVSET0')
             effect = collada.material.Effect(
                 f"effect-{rk_material.name}",
@@ -130,7 +145,7 @@ class RKFormat():
                 diffuse = map,
                 transparent = map,
                 transparency = map,
-                double_sided = not rk_material.info.Cull,
+                double_sided = not rk_material.properties.Cull,
             )
             mat = collada.material.Material(f"material-{rk_material.name}", rk_material.name, effect)
             mesh.effects.append(effect)
@@ -157,7 +172,7 @@ class RKFormat():
             input_list.addInput(0, 'TEXCOORD', f'#{uv_src.id}')
             indices = []
             for tri in rk_mesh.triangles:
-                indices.extend([tri.index1, tri.index2, tri.index3])
+                indices.extend([tri.x, tri.y, tri.z])
             triset = geometry.createTriangleSet(numpy.array(indices), input_list, f'materialRef-{rk_mesh.material}')
 
             geometry.primitives.append(triset)
@@ -187,7 +202,7 @@ class RKFormat():
 
         mesh.write(output)
         for material in self.materials:
-            material.info.image.save(os.path.join(output_folder, material.info.DiffuseTexture + '.png'))
+            material.properties.image.save(os.path.join(output_folder, material.properties.DiffuseTexture + '.png'))
         
         return
     
@@ -200,30 +215,30 @@ class RKFormat():
         
         return header
     
-    def _read_info(self, file: BinaryIO):
-        info: Mapping[enums.rk.Info, tuple[int,int,int]] = {}
+    def _read_sections_header(self, file: BinaryIO):
+        sections: Mapping[enums.rk.Tag, SectionHeader] = {}
         size = 24 * 16
         
-        for i in struct.iter_unpack(
+        for tag in struct.iter_unpack(
             '4I',
             file.read(size),
         ):
-            if i[0]:
-                info[i[0]] = i[1:]
+            if tag[0]:
+                sections[tag[0]] = SectionHeader(*tag)
         
-        return info
+        return sections
 
     def _read_materials(self, file: BinaryIO):
-        texture_info = self.info.get(enums.rk.Info.TEXTURES)
+        texture_info = self.section_headers.get(enums.rk.Tag.MATERIALS)
         if texture_info is None:
             return []
         
-        file.seek(texture_info[0])
+        file.seek(texture_info.offset)
 
         materials: list[Material] = []
         
-        for x in range(texture_info[1]):
-            name = file.read(texture_info[2]//texture_info[1])
+        for x in range(texture_info.count):
+            name = file.read(texture_info.byte_length//texture_info.count)
             if b'\00' in name:
                 name = name[:name.index(b'\00')]
             name = name.decode('ascii', errors = 'ignore')
@@ -254,7 +269,7 @@ class RKFormat():
         return materials
 
     def _read_attributes(self, file: BinaryIO):
-        attributes_info = self.info.get(enums.rk.Info.ATTRIBUTES)
+        attributes_info = self.section_headers.get(enums.rk.Tag.ATTRIBUTES)
         if attributes_info is None:
             return []
         
@@ -264,43 +279,43 @@ class RKFormat():
         
         self._uv_offset, self._uv_format = 0, 0
         self._uv_scale = 1
-        file.seek(attributes_info[0])
-        for x in range(attributes_info[1]):
-            i = struct.unpack(
+        file.seek(attributes_info.offset)
+        for x in range(attributes_info.count):
+            attribute = struct.unpack(
                 format_str,
                 file.read(struct.calcsize(format_str)),
             )
-            if i[0] == 1030:
-                self._uv_offset, self._uv_format = i[1], 'H'
+            if attribute[0] == 1030:
+                self._uv_offset, self._uv_format = attribute[1], 'H'
                 self._uv_scale = 2
                 
-            elif i[0] == 1026:
-                self._uv_offset, self._uv_format = i[1], 'f'
+            elif attribute[0] == 1026:
+                self._uv_offset, self._uv_format = attribute[1], 'f'
                 self._uv_scale = 1
             
-            attributes.append(i)
+            attributes.append(attribute)
         
         return attributes
 
     def _read_submesh_info(self, file: BinaryIO):
-        submesh_names_info = self.info.get(enums.rk.Info.SUBMESH_NAMES)
+        submesh_names_info = self.section_headers.get(enums.rk.Tag.SUBMESH_NAMES)
         if submesh_names_info is None:
             return []
         
-        submesh_info_info = self.info.get(enums.rk.Info.SUBMESH_INFO)
+        submesh_info_info = self.section_headers.get(enums.rk.Tag.SUBMESH_INFO)
         if submesh_info_info is None:
             return []
         
         submeshes = []
         
-        file.seek(submesh_names_info[0])
+        file.seek(submesh_names_info.offset)
         submesh_names = []
-        for x in range(submesh_names_info[1]):
-            submesh_names.append(read_ascii_string(file))
+        for x in range(submesh_names_info.count):
+            submesh_names.append(read_ascii_string(file, 64))
         
         
-        file.seek(submesh_info_info[0])
-        for x in range(submesh_info_info[1]):
+        file.seek(submesh_info_info.offset)
+        for x in range(submesh_info_info.count):
             info = struct.unpack(
                 '4I',
                 file.read(struct.calcsize('4I')),
@@ -317,15 +332,15 @@ class RKFormat():
     
     def _read_verts(self, file: BinaryIO) -> list[tuple[float,float,float,float]]:
         
-        verts_info = self.info.get(enums.rk.Info.VERTS)
+        verts_info = self.section_headers.get(enums.rk.Tag.VERTS)
         if verts_info is None:
             return []
         
-        file.seek(verts_info[0])
+        file.seek(verts_info.offset)
         
 
-        stride = verts_info[2] // verts_info[1]
-        vbuf = file.read(verts_info[2])
+        stride = verts_info.byte_length // verts_info.count
+        vbuf = file.read(verts_info.byte_length)
         
         verts = []
         
@@ -347,9 +362,11 @@ class RKFormat():
             vbuf,
         ):
             vert = Vert(
-                x = vert_info[0],
-                y = vert_info[1],
-                z = vert_info[2],
+                pos = Vector3(
+                    x = vert_info[0],
+                    y = vert_info[1],
+                    z = vert_info[2],
+                )
             )
 
             if self._uv_format == 'H':
@@ -364,8 +381,7 @@ class RKFormat():
         return verts
 
     def _read_bones(self, file: BinaryIO):
-        
-        bones_info = self.info.get(enums.rk.Info.BONES)
+        bones_info = self.section_headers.get(enums.rk.Tag.BONES)
         if bones_info is None:
             return []
         
@@ -373,11 +389,11 @@ class RKFormat():
         
         bone_format = '3i64s64s'
         
-        if bones_info[1]:
-            file.seek(bones_info[0])
-            for parent, index, child, matrix_buffer, name in struct.iter_unpack(
+        if bones_info.count:
+            file.seek(bones_info.offset)
+            for parent, index, children, matrix_buffer, name in struct.iter_unpack(
                 bone_format,
-                file.read(bones_info[1] * struct.calcsize(
+                file.read(bones_info.count * struct.calcsize(
                     bone_format
                 )),
             ):
@@ -389,56 +405,68 @@ class RKFormat():
                 bones.append(Bone(
                     parentIndex = parent,
                     index = index,
-                    child = child,
+                    children = children,
                     matrix_3x4 = matrix.swapaxes(1,0)[:,:3],
-                    matrix_4x4 = matrix,
+                    matrix_4x4 = matrix.swapaxes(1,0),
+                    matrix_buffer = matrix_buffer,
                     name = read_ascii_string(name),
                 ))
         
         return bones
 
     def _read_indexes_and_weights(self, file: BinaryIO):
-        weight_info = self.info.get(enums.rk.Info.WEIGHTS)
+        weight_info = self.section_headers.get(enums.rk.Tag.WEIGHTS)
         if weight_info is None:
             return []
         
-        file.seek(weight_info[0])
+        file.seek(weight_info.offset)
         
-        buffer = file.read(weight_info[2])
+        buffer = file.read(weight_info.byte_length)
 
-        stride = weight_info[2] // weight_info[1]
+        stride = weight_info.byte_length // weight_info.count
         
         indexes = []
         
-        vert_index = 0
+        # vert_index = 0
         
-        for unpacked in struct.iter_unpack(
-            'BB2xHH4x',
+        for vert_index, unpacked in enumerate(struct.iter_unpack(
+            '4B4H',
             buffer,
-        ):
+        )):
             vert = self.verts[vert_index]
             
+            for bone_index, weight in zip(*split_list(unpacked, 2)):
+                vert.bones.append(VertBone(
+                    bone = bone_index,
+                    weight = weight / USHORT_MAX,
+                ))
             
-            vert.bone_index1 = unpacked[0]
-            vert.weight1 = unpacked[2] / USHORT_MAX
-            vert.bone_index2 = unpacked[1]
-            vert.weight2 = unpacked[3] / USHORT_MAX
+            # vert.bone_index1 = unpacked[0]
+            # vert.weight1 = unpacked[2] / USHORT_MAX
+            # vert.bone_index2 = unpacked[1]
+            # vert.weight2 = unpacked[3] / USHORT_MAX
             
             
-            vert_index += 1
+            # vert_index += 1
     
     def _read_meshes(self, file: BinaryIO):
-        mesh_info =  self.info.get(enums.rk.Info.TRIANGLES)
+        mesh_info =  self.section_headers.get(enums.rk.Tag.FACES)
         if mesh_info is None:
             return []
 
         meshes = []
         
-        triangle_format = 'H'
-        if self.info.get(enums.rk.Info.VERTS, (0,0,0))[1] > USHORT_MAX:
-            triangle_format = 'I'
+        formats: Mapping[int, str] = {
+            2: 'H',
+            4: 'I',
+        }
         
-        file.seek(mesh_info[0])
+        stride = mesh_info.byte_length // mesh_info.count
+        assert stride in formats, f'Bad item size {stride} for face section. Expected 2 or 4 bytes.'
+
+        triangle_format = formats[stride]
+        
+        file.seek(mesh_info.offset)
         for submesh in self.submeshes:
             mesh = Mesh(submesh.name)
             meshes.append(mesh)
@@ -451,9 +479,9 @@ class RKFormat():
                 file.read(submesh.triangles * 3 * struct.calcsize(triangle_format)),
             ):
                 mesh.triangles.append(Triangle(
-                    index1 = triangle_data[2],
-                    index2 = triangle_data[1],
-                    index3 = triangle_data[0],
+                    x = triangle_data[0],
+                    y = triangle_data[1],
+                    z = triangle_data[2],
                 ))
         
         return meshes
@@ -522,12 +550,17 @@ class Mesh:
 @dataclass
 class Bone:
     index: int
-    child: int
+    children: int
     name: str
     matrix_3x4: numpy.ndarray
     matrix_4x4: numpy.ndarray
+    matrix_buffer: bytes
     parentName: str | None = None,
     parentIndex: int = -1
+    
+    def decompose_bone_matrix(self):
+        return decompose_bone_matrix(self.matrix_4x4)
+        
 
 @dataclass
 class Submesh:
@@ -543,31 +576,31 @@ class Material:
     rkm: str
     
     @property
-    def info(self) -> 'RKM':
+    def properties(self) -> 'RKM':
         if not hasattr(self, '_info'):
             self._info = parse_rkm(self.rkm)
         
         return self._info
     
-    @info.setter
-    def info(self, value: dict[str | int | bool]):
+    @properties.setter
+    def properties(self, value: dict[str | int | bool]):
         self._info = value
 
 @dataclass
+class VertBone:
+    bone: int
+    weight: float
+
+@dataclass
 class Vert:
-    x: float
-    y: float
-    z: float
+    pos: Vector3 = dataclasses.field(default_factory = Vector3)
     u: float = 0
     v: float = 0
     
-    bone_index1: int = 0
-    weight1: float = 0
-    bone_index2: int = 0
-    weight2: float = 0
+    bones: list[VertBone] = dataclasses.field(default_factory = list)
 
 @dataclass
 class Triangle:
-    index1: int
-    index2: int
-    index3: int
+    x: int
+    y: int
+    z: int

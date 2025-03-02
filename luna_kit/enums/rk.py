@@ -1,11 +1,10 @@
 from enum import IntEnum
 
-class Info(IntEnum):
+class Tag(IntEnum):
     SUBMESH_INFO = 1
-    TEXTURES = 2
+    MATERIALS = 2
     VERTS = 3
-    TRIANGLES = 4
-    TRANSFORM = 6
+    FACES = 4
     BONES = 7
     ATTRIBUTES = 13
     SUBMESH_NAMES = 16

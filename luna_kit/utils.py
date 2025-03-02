@@ -91,3 +91,10 @@ def split_into_chunks(value: Iterable, n: int = 2):
         result.append([v for _, v in chunk])
     
     return result
+
+def split_list(array: Iterable, wanted_parts: int = 2):
+    length = len(array)
+    return [
+        array[i*length // wanted_parts: (i+1)*length // wanted_parts]
+        for i in range(wanted_parts)
+    ]

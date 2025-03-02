@@ -1,21 +1,20 @@
 import csv
-import dataclasses
 import os
 import struct
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Annotated, BinaryIO, Literal
-import csv
 
 import dataclasses_struct as dcs
 import numpy
-import PIL.Image
+# from pyquaternion import Quaternion
 
-from . import enums
-from .file_utils import PathOrBinaryFile, open_binary
-from .pvr import PVR
-from .utils import (increment_name_num, read_ascii_string, strToBool,
-                    strToFloat, strToInt)
+from ..file_utils import PathOrBinaryFile, open_binary
+from ..utils import (increment_name_num, read_ascii_string, strToBool,
+                     strToFloat, strToInt)
+from .. import enums
+from .model_common import Vector3, Quaternion
+
 
 @dcs.dataclass()
 class Header:
@@ -25,7 +24,7 @@ class Header:
     name: Annotated[bytes, 64] = b' ' * 64
     bone_count: dcs.U32 = 0
     frame_count: dcs.U32 = 0
-    unknown: dcs.U32 = 4
+    frame_type: dcs.U32 = 4
 
 @dataclass
 class Animation:
@@ -36,11 +35,11 @@ class Animation:
 
 @dataclass
 class BoneTransformation:
-    position: tuple[float, float, float]
-    scale: int
-    rotation: tuple[float, float, float, float]
+    position: Vector3
+    quaternion: Quaternion
     
-    FORMAT: str = '3h1B4b'
+    POS_FORMAT: str = '3h'
+    QUAT_FORMAT: str = '1h3b'
 
 class Anim:
     MAGIC: bytes = b'RKFORMAT'
@@ -104,14 +103,26 @@ class Anim:
         return frames
     
     def _read_bone_transformation(self, file: BinaryIO):
-        frame_data = struct.unpack(
-            BoneTransformation.FORMAT,
-            file.read(struct.calcsize(BoneTransformation.FORMAT)),
+        pos = struct.unpack(
+            BoneTransformation.POS_FORMAT,
+            file.read(struct.calcsize(BoneTransformation.POS_FORMAT)),
+        )
+        quat = struct.unpack(
+            BoneTransformation.QUAT_FORMAT,
+            file.read(struct.calcsize(BoneTransformation.QUAT_FORMAT)),
         )
         
         return BoneTransformation(
-            frame_data[0:3],
-            frame_data[3],
-            frame_data[4:8],
+            Vector3(
+                pos[0] / 32,
+                pos[1] / 32,
+                pos[2] / 32,
+            ),
+            Quaternion(
+                quat[0] / 32767,
+                quat[1] / 127,
+                quat[2] / 127,
+                quat[3] / 127,
+            ),
         )
 
