@@ -1,0 +1,1 @@
+from .defaultGameCampaign import DefaultGameCampaignType
