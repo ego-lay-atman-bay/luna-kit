@@ -1,6 +1,7 @@
 import argparse
-from argparse import Action
 import glob
+import logging
+from argparse import Action
 from typing import Any
 
 
@@ -12,6 +13,8 @@ class GlobFiles(Action):
         values: Any,
         option_string: str | None = None,
     ):
+        
+        logging.debug(f'glob files: {values}')
 
         result = []
         

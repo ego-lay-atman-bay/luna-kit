@@ -1,7 +1,10 @@
+import logging
 import sys
 from abc import abstractmethod
 from argparse import ArgumentParser, Namespace
 from typing import Type
+
+from ..console import console
 
 
 class CLI():
@@ -28,6 +31,13 @@ class CLI():
         return command
     
     def build_args(self):
+        self.argparser.add_argument(
+            '--log-level',
+            dest = 'log_level',
+            help = f'log level {{{", ".join(logging._nameToLevel.keys())}}}',
+            default = logging.INFO,
+        )
+        
         for command in self.COMMANDS.values():
             command.build_args(self.subparser.add_parser(
                 command.COMMAND,
@@ -39,8 +49,19 @@ class CLI():
             self.argparser.print_help()
             sys.exit()
         
-        args = self.argparser.parse_args(argv)
+        if '--log-level' in argv:
+            log_level = argv[argv.index('--log-level') + 1]
+            console.print(f'setting log level to {log_level}')
         
+            if isinstance(log_level, str):
+                log_level = logging._nameToLevel.get(log_level.upper(), logging.INFO)
+        
+            logging.basicConfig(
+                level = log_level,
+                # format = '[%(levelname)s] %(message)s',
+            )
+        
+        args = self.argparser.parse_args(argv)
         
         command = self.COMMANDS.get(args.command)
         if command:

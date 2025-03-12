@@ -97,6 +97,7 @@ class ARKParser(CLICommand):
         versions = {}
         
         if len(files) == 1:
+            console.print(f'Opening: [yellow]{files[0]}[/]')
             with ARK(files[0]) as ark_file:
                 if args.data_version:
                     version = ark_file.data_version
@@ -113,7 +114,7 @@ class ARKParser(CLICommand):
                 else:
                     path = output
                 
-                
+                console.print(f'Opening: [yellow]{filename}[/]')
                 with ARK(filename) as ark_file:
                     if args.data_version:
                         version = ark_file.data_version
