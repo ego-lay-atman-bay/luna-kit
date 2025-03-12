@@ -28,6 +28,8 @@ class GlobFiles(Action):
                 include_hidden = True,
             ))
         
+        logging.debug(f'found: {result}')
+        
         setattr(namespace, self.dest, result)
     
     def format_usage(self):
