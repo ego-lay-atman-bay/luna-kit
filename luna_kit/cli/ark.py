@@ -4,6 +4,7 @@ from argparse import ArgumentParser, Namespace
 from rich.progress import Progress, track
 
 from ..console import console
+from ._actions import GlobFiles
 from .cli import CLI, CLICommand
 
 
@@ -18,6 +19,7 @@ class ARKParser(CLICommand):
             'files',
             nargs = '+',
             help = 'input .ark files',
+            action = GlobFiles,
         )
         
         parser.add_argument(
@@ -56,11 +58,13 @@ class ARKParser(CLICommand):
             
         output = './'
         
-        files = []
-        for pattern in args.files:
-            files.extend(glob(pattern))
+        files: list[str] = args.files
         
         files.sort()
+        
+        if len(files) == 0:
+            console.print('[red]No files found[/]')
+            return
         
         if args.output:
             output = args.output
