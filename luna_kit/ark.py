@@ -11,7 +11,7 @@ from collections import namedtuple
 from collections.abc import Callable, Iterable, Iterator
 from copy import copy, deepcopy
 from ctypes import *
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import IO, Annotated, Any, BinaryIO, Literal, NamedTuple
 
@@ -28,12 +28,33 @@ def metadata_by_file_location(metadata: 'FileMetadata'):
     return metadata.file_location
 
 @dcs.dataclass()
-class Header():
+class _v1Header():
     file_count: dcs.U32 = 0
-    
     metadata_offset: dcs.U32 = 0
-    ark_version: dcs.U32 = 0
-    # unknown: Annotated[bytes, 20] = b''
+    version: dcs.U32 = 0
+
+@dcs.dataclass()
+class _v3v4Header():
+    file_count: dcs.U32 = 0
+    metadata_offset: dcs.U32 = 0
+    version: dcs.U32 = 0
+    metadata_length: dcs.U32 = 0
+    unknown: Annotated[bytes, 16] = b'\x00' * 16
+
+@dataclass
+class Header:
+    version: int = 4
+    file_count: int = 0
+    metadata_offset: int = 0
+    metadata_length: int = 0
+    unknown: bytes = b''
+    
+_HEADER_STRUCTS = {
+    1: _v1Header,
+    3: _v3v4Header,
+    4: _v3v4Header,
+}
+
 
 HEADER_FORMAT = "3I"
 
@@ -128,13 +149,19 @@ class FileMetadata:
             priority = self.priority,
         ).pack()
 
+_METADATA_STRUCTS: dict[int, _v1v3FileMetadataStruct | _v4FileMetadataStruct] = {
+    1: _v1v3FileMetadataStruct,
+    3: _v1v3FileMetadataStruct,
+    4: _v4FileMetadataStruct,
+}
+
 
 FILE_METADATA_FORMAT = "128s128s5I16sI"
 
 class ARK():
     KEY = [0x3d5b2a34, 0x923fff10, 0x00e346a4, 0x0c74902b]
     
-    header: Header
+    header: _v3v4Header
     unknown_header_data: bytes
     _files: 'ARKMetadataCollection[FileMetadata]'
     
@@ -248,10 +275,8 @@ class ARK():
         
         file.seek(0)
         packed_files = self._pack_files()
-        self.header.metadata_offset = dcs.get_struct_size(Header) + len(self.unknown_header_data)
+        self.header.metadata_offset = dcs.get_struct_size(_v3v4Header) + len(self.unknown_header_data)
         for data, meta in packed_files:
-            
-            
             meta.file_location = self.header.metadata_offset
             self.header.metadata_offset += len(data)
         
@@ -265,7 +290,7 @@ class ARK():
         data, metadata = file.pack()
         self._write_file(data, metadata, self.__open_file)
     
-    def _read_header(self, file: IO) -> Header:
+    def _read_header(self, file: IO) -> _v3v4Header:
         """Read the header of a `.ark` file.
 
         Args:
@@ -274,17 +299,28 @@ class ARK():
         Returns:
             dict: Header.
         """
-        self.unknown_header_data = b''
         
-        header: Header = Header.from_packed(
-            file.read(dcs.get_struct_size(Header))
+        header_start = file.tell()
+        file.seek(8)
+        version = struct.unpack('<I', file.read(4))[0]
+        file.seek(-1, os.SEEK_END)
+        filesize = file.tell()
+        file.seek(0)
+        
+        if version not in _HEADER_STRUCTS:
+            raise ValueError(f'Unknown file version {header.ark_version}')
+        
+        raw_header: _v1Header | _v3v4Header = _HEADER_STRUCTS[version].from_packed(
+            file.read(dcs.get_struct_size(_HEADER_STRUCTS[version]))
         )
         
-        if header.ark_version not in [1, 3, 4]:
-            raise ValueError(f'Unknown file version {header.ark_version}')
-
-        if header.ark_version in [3, 4]:
-            self.unknown_header_data = file.read(20)
+        header = Header(
+            version = raw_header.version,
+            file_count = raw_header.file_count,
+            metadata_offset = raw_header.metadata_offset,
+            metadata_length = raw_header.metadata_length if hasattr(raw_header, 'metadata_length') else filesize - raw_header.metadata_offset,
+            unknown = raw_header.unknown if hasattr(raw_header, 'unknown') else b'',
+        )
         
         return header
     
@@ -329,30 +365,27 @@ class ARK():
 
         self.decrypted_metadata = metadata
         
-        if self.header.ark_version == 1:
+        if self.header.version == 1:
             raw_metadata = metadata
-        elif self.header.ark_version in [3, 4]:
+        elif self.header.version in [3, 4]:
             raw_metadata = self._decompresser.decompress(metadata, raw_metadata_size)
         else:
-            raise ValueError(f'Unknown file version {self.header.ark_version}')
+            raise ValueError(f'Unknown file version {self.header.version}')
             
             
         self.raw_metadata = raw_metadata
 
-        metadata_size = dcs.get_struct_size(_v4FileMetadataStruct if self.header.ark_version == 4 else _v1v3FileMetadataStruct)
+        metadata_struct = _METADATA_STRUCTS[self.header.version]
+
+        metadata_size = dcs.get_struct_size(metadata_struct)
         result = ARKMetadataCollection()
         for file_index in range(self.header.file_count):
             offset = file_index * metadata_size
             
+            file_result: _v1v3FileMetadataStruct | _v4FileMetadataStruct = metadata_struct.from_packed(
+                raw_metadata[offset : offset + metadata_size]
+            )
             
-            if self.header.ark_version == 4:
-                file_result: _v4FileMetadataStruct = _v4FileMetadataStruct.from_packed(
-                    raw_metadata[offset : offset + metadata_size]
-                )
-            else:
-                file_result: _v1v3FileMetadataStruct = _v1v3FileMetadataStruct.from_packed(
-                    raw_metadata[offset : offset + metadata_size]
-                )
             
             result.append(FileMetadata(
                 filename = read_ascii_string(file_result.filename),
@@ -362,11 +395,11 @@ class ARK():
                 compressed_size = file_result.compressed_size,
                 encrypted_nbytes = file_result.encrypted_nbytes,
                 timestamp = file_result.timestamp,
-                md5sum = bytes.fromhex(file_result.md5sum.hex()) if self.header.ark_version != 4 else None,
-                unknown = file_result.unknown if self.header.ark_version == 4 else None,
+                md5sum = bytes.fromhex(file_result.md5sum.hex()) if hasattr(file_result, 'md5sum') else None,
+                unknown = file_result.unknown if hasattr(file_result, 'unknown') else None,
                 priority = file_result.priority,
                 
-                ark_version = self.header.ark_version,
+                ark_version = self.header.version,
             ))
 
         return result
@@ -395,9 +428,9 @@ class ARK():
         
         if (metadata.compressed_size != metadata.original_filesize):
             compressed = True
-            if self.header.ark_version == 1:
+            if self.header.version == 1:
                 file_data = zlib.decompress(file_data)
-            elif self.header.ark_version >= 3:
+            elif self.header.version >= 3:
                 file_data = self._decompresser.decompress(file_data, metadata.original_filesize)
         
         file_data = file_data[:metadata.original_filesize]
@@ -491,9 +524,9 @@ class ARK():
         print('expected size:', expected_size)
         print('actual size:', len(metadata_block))
         
-        if self.header.ark_version == 1:
+        if self.header.version == 1:
             pass
-        elif self.header.ark_version == 3:
+        elif self.header.version == 3:
             metadata_block = zstandard.compress(metadata_block, 9)
         
         print('compressed size', len(metadata_block))
