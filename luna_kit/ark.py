@@ -376,7 +376,7 @@ class ARK():
         self.header.file_count = len(self._files)
         
         self.header.metadata_offset = self._files[-1].file_location + (self._files[-1].encrypted_size or self._files[-1].compressed_size)
-        self.header.metadata_length = 
+        # self.header.metadata_length = 
         
         file.write(self.header.pack())
 
