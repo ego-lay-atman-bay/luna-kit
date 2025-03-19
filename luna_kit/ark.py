@@ -440,8 +440,8 @@ class ARK():
                 encrypted_size = file_result.encrypted_size,
                 timestamp = file_result.timestamp,
                 md5sum = bytes.fromhex(file_result.md5sum.hex()) if hasattr(file_result, 'md5sum') else None,
-                unknown1 = file_result.unknown if hasattr(file_result, 'unknown1') else None,
-                unknown2 = file_result.unknown if hasattr(file_result, 'unknown2') else None,
+                unknown1 = file_result.unknown1 if hasattr(file_result, 'unknown1') else None,
+                unknown2 = file_result.unknown2 if hasattr(file_result, 'unknown2') else None,
                 priority = file_result.priority,
                 
                 version = self.header.version,
