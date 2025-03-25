@@ -2,10 +2,13 @@ import struct
 import warnings
 from typing import Annotated, BinaryIO
 
-import dataclasses_struct as dcs
-import numpy
-import texture2ddecoder
-from PIL import Image
+try:
+    import dataclasses_struct as dcs
+    import texture2ddecoder
+    from PIL import Image
+except ImportError as e:
+    e.add_note('pvr dependencies not found')
+    raise e
 
 from .file_utils import PathOrBinaryFile, open_binary
 

@@ -10,6 +10,8 @@ from .file_utils import is_binary_file, is_text_file
 
 
 class LOC(UserDict):
+    data: dict[str, str]
+    
     def __init__(self, file: str | bytes | bytearray | BinaryIO = None) -> None:
         super().__init__()
         

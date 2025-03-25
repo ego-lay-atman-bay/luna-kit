@@ -1,7 +1,7 @@
 import os
 import warnings
 from collections import UserDict
-from typing import IO, Literal
+from typing import IO, Literal, Any
 
 from lxml import etree
 
@@ -128,6 +128,9 @@ class GameObjectData(dict):
 
     def __getitem__(self, key: str) -> dict[str, GameObject]:
         return super().__getitem__(key)
+    
+    def get(self, key: str, default: Any = None) -> dict[str, GameObject]:
+        return super().get(key, default)
 
     def _parse_category_manifest(self, manifest_xml: etree._Element):
         self.CATEGORY_DATA = {}

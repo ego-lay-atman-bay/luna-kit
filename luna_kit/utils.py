@@ -3,9 +3,6 @@ import pathlib
 from itertools import groupby
 from typing import BinaryIO, Iterable
 
-import PIL.IcnsImagePlugin
-import PIL.ImageChops
-
 
 def posix_path(path):
     result = pathlib.Path(path)

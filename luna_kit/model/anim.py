@@ -5,15 +5,20 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Annotated, BinaryIO, Literal
 
-import dataclasses_struct as dcs
-import numpy
-# from pyquaternion import Quaternion
+try:
+    import dataclasses_struct as dcs
+    import numpy
+    # from pyquaternion import Quaternion
+except ImportError as e:
+    e.add_note('model dependencies not found')
+    raise e
 
 from ..file_utils import PathOrBinaryFile, open_binary
 from ..utils import (increment_name_num, read_ascii_string, strToBool,
                      strToFloat, strToInt)
 from .. import enums
-from .model_common import Vector3, Quaternion
+from .model_common import Vector3
+from .mathutils import Quaternion
 
 
 @dcs.dataclass()

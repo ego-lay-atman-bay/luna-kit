@@ -1,5 +1,9 @@
-import numpy
-import numpy.typing
+try:
+    import numpy
+    import numpy.typing
+except ImportError as e:
+    e.add_note('model dependencies not found')
+    raise e
 
 from typing import Self, overload, Iterable
 

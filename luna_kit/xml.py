@@ -1,7 +1,13 @@
-import charset_normalizer
-from lxml import etree
 import os
-from .file_utils import is_file_like, open_binary, PathOrBinaryFile, PathOrFile
+
+try:
+    import charset_normalizer
+    from lxml import etree
+except ImportError as e:
+    e.add_note('xml dependencies not found')
+    raise e
+
+from .file_utils import PathOrBinaryFile, PathOrFile, is_file_like, open_binary
 
 
 def parse_xml(

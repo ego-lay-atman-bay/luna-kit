@@ -1,7 +1,10 @@
 from typing import TYPE_CHECKING, Self, Type
 
-import numpy
-import scipy.spatial.transform
+try:
+    import numpy
+except ImportError as e:
+    e.add_note('model dependencies not found')
+    raise e
 
 if TYPE_CHECKING:
     from .quaternion import Quaternion
@@ -188,6 +191,7 @@ class Matrix3(Matrix):
     def _mat3_normalized_to_quat(self, mat: numpy.ndarray):
         q = [0,0,0,0]
         
+        # import scipy.spatial.transform
         # q = scipy.spatial.transform.Rotation.from_matrix(mat).as_quat(scalar_first = True)
         # return q
         

@@ -4,6 +4,11 @@ from abc import abstractmethod
 from argparse import ArgumentParser, Namespace
 from typing import Type
 
+try:
+    import rich
+except ImportError:
+    raise ImportError('CLI dependency "rich" not found')
+
 from ..console import console
 
 

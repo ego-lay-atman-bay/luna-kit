@@ -2,8 +2,12 @@ import math
 from collections.abc import Iterable
 from typing import Annotated, overload, Self
 
-import numpy
-import numpy.typing
+try:
+    import numpy
+    import numpy.typing
+except ImportError as e:
+    e.add_note('model dependencies not found')
+    raise e
 
 
 class Quaternion:
@@ -201,7 +205,11 @@ class Quaternion:
         """
         from .matrix import Matrix3
         
-        import scipy.spatial.transform
+        try:
+            import scipy.spatial.transform
+        except ImportError as e:
+            e.add_note('model dependency not found')
+            raise e
         
         return Matrix3(scipy.spatial.transform.Rotation.from_quat(self.array, scalar_first = True).as_matrix().swapaxes(1,0))
         

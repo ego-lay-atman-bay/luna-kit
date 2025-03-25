@@ -1,4 +1,3 @@
-import contextlib
 import hashlib
 import io
 import logging
@@ -7,22 +6,26 @@ import struct
 import sys
 import warnings
 import zlib
-from collections import namedtuple
 from collections.abc import Callable, Iterable, Iterator
-from copy import copy, deepcopy
+from copy import deepcopy
 from ctypes import *
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
-from typing import IO, Annotated, Any, BinaryIO, Literal, NamedTuple
+from typing import IO, Annotated, Any, BinaryIO
 
-import dataclasses_struct as dcs
-import zstandard
-from lxml import etree
+try:
+    import dataclasses_struct as dcs
+    import zstandard
+    from lxml import etree
+except ImportError as e:
+    e.add_note('ark dependencies could not be found')
+    raise e
 
 from . import enums, types, xxtea
 from .file_utils import (PathOrBinaryFile, get_filesize, is_binary_file,
                          is_text_file, open_binary)
 from .utils import posix_path, read_ascii_string, trailing_slash
+
 
 def metadata_by_file_location(metadata: 'FileMetadata'):
     return metadata.file_location

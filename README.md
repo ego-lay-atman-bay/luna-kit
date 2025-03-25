@@ -5,13 +5,13 @@ This is a toolkit that is used for reading files from the My Little Pony Magic P
 You can install Luna Kit by first making sure [python](https://python.org), and [git](https://git-scm.com/) is installed, then run
 
 ```shell
-pip install git+https://github.com/ego-lay-atman-bay/luna-kit
+pip install git+https://github.com/ego-lay-atman-bay/luna-kit[cli]
 ```
 
 To update, run this command.
 
 ```shell
-pip install --upgrade git+https://github.com/ego-lay-atman-bay/luna-kit --force
+pip install --upgrade git+https://github.com/ego-lay-atman-bay/luna-kit[cli] --force
 ```
 
 # Usage
@@ -69,6 +69,21 @@ You can also output csv files
 ```shell
 luna-kit loc "english.loc" --format csv
 ```
+
+## Development
+
+If you are writing a script that uses luna-kit, it is important to know all the optional dependencies (the text in brackets at the end of the installation requirement, like `luna-kit[cli]`). Multiple can also be specified `luna-kit[ark,xml,pvr,rk]`.
+
+- `[ark]`: Required for reading `.ark` files
+- `[loc]`: Required for reading `.loc` files (ok, there's no dependencies for this)
+- `[audio]`: Required for reading audio files (just installed `vxn-py` and `filetype`)
+- `[xml]`: Required for reading xml files
+- `[texatlas]`: Required for reading `.texatlas` files
+- `[pvr]`: Required for reading `.pvr` files
+- `[model]`: Required for reading `.rk` and `.anim` files (and for doing transformations)
+- `[rk]`: Barebones requirements for reading `.rk` and `.anim` files
+- `[cli]`: Everything needed to run the cli
+- `[all]`: Includes Everything but the cli specific stuff (`rich`)
 
 # Converting audio
 

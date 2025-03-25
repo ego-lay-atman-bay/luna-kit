@@ -16,25 +16,101 @@ classifiers = [
     "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
     "Operating System :: OS Independent",
 ]
-dependencies = [
+dependencies = []
+dynamic = ["version"]
+
+[project.optional-dependencies]
+ark = [
   "zstandard",
   "dataclasses-struct",
-  "Pillow",
   "lxml",
-  # "astc-encoder-py",
-  "texture2ddecoder",
-  "numpy",
-  "charset-normalizer",
-  # "beautifulsoup4",
+]
+
+loc = []
+
+audio = [
   "vxn-py",
   "filetype",
-  "rich",
-  "pyquaternion",
+]
+
+xml = [
+  "lxml",
+  "dataclasses-struct",
+]
+
+texatlas = [
+  "Pillow",
+]
+
+pvr = [
+  "dataclasses-struct",
+  "Pillow",
+  # "astc-encoder-py",
+  "texture2ddecoder",
+]
+
+model = [
+  "dataclasses-struct",
+  "numpy",
   "pygltflib",
-  # "quaternionic",
+  "datauri",
+  "scipy",
+  
+  "Pillow",
+  # "astc-encoder-py",
+  "texture2ddecoder",
+]
+
+# Minimal model dependencies (for rk-blender)
+rk = [
+  "dataclasses-struct",
+  "numpy",
+  # "astc-encoder-py",
+  "Pillow",
+  "texture2ddecoder",
+]
+
+cli = [
+  "rich",
+
+  "zstandard",
+  "dataclasses-struct",
+
+  "Pillow",
+
+  "lxml",
+  "charset-normalizer",
+
+  # "astc-encoder-py",
+  "texture2ddecoder",
+
+  "vxn-py",
+  "filetype",
+  # "numpy",
+  # "pygltflib",
+  # "scipy",
+]
+
+all = [
+  "zstandard",
+  "dataclasses-struct",
+
+  "Pillow",
+
+  "lxml",
+  "charset-normalizer",
+
+  # "astc-encoder-py",
+  "texture2ddecoder",
+
+  "vxn-py",
+  "filetype",
+
+  "numpy",
+  "pygltflib",
+  "datauri",
   "scipy",
 ]
-dynamic = ["version"]
 
 [project.urls]
 "Homepage" = "https://github.com/ego-lay-atman-bay/luna-kit"

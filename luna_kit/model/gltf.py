@@ -4,9 +4,13 @@ import struct
 from dataclasses import dataclass
 from typing import Literal
 
-import numpy
-import pygltflib
-from datauri import DataURI
+try:
+    import numpy
+    import pygltflib
+    from datauri import DataURI
+except ImportError as e:
+    e.add_note('model dependencies not found')
+    raise e
 
 from ..file_utils import PathOrBinaryFile, open_binary
 from .model_common import (USHORT_MAX, Vector3, Vector4, compose_bone_matrix,

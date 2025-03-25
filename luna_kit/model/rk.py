@@ -1,26 +1,28 @@
 import csv
 import dataclasses
-import io
-import math
 import os
 import struct
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Annotated, BinaryIO, Literal
 
-import dataclasses_struct as dcs
-import numpy
-import PIL.Image
-# import quaternion
-# from pyquaternion import Quaternion
+try:
+    import dataclasses_struct as dcs
+    import numpy
+    import PIL.Image
+    # import quaternion
+    # from pyquaternion import Quaternion
+except ImportError as e:
+    e.add_note('model dependencies not found')
+    raise e
 
 from .. import enums
 from ..file_utils import PathOrBinaryFile, open_binary
 from ..pvr import PVR
-from ..utils import (increment_name_num, read_ascii_string, split_list,
+from ..utils import (read_ascii_string, split_list,
                      strToBool, strToFloat, strToInt)
 from .anim import Anim
-from .model_common import USHORT_MAX, Vector3, Vector4, decompose_bone_matrix
+from .model_common import USHORT_MAX, Vector3
 
 
 @dcs.dataclass()
@@ -558,8 +560,8 @@ class Bone:
     parentName: str | None = None,
     parentIndex: int = -1
     
-    def decompose_bone_matrix(self):
-        return decompose_bone_matrix(self.matrix_4x4)
+    # def decompose_bone_matrix(self):
+    #     return decompose_bone_matrix(self.matrix_4x4)
         
 
 @dataclass
