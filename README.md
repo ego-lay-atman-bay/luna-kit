@@ -5,13 +5,13 @@ This is a toolkit that is used for reading files from the My Little Pony Magic P
 You can install Luna Kit by first making sure [python](https://python.org), and [git](https://git-scm.com/) is installed, then run
 
 ```shell
-pip install git+https://github.com/ego-lay-atman-bay/luna-kit[cli]
+pip install luna-kit[cli]@git+https://github.com/ego-lay-atman-bay/luna-kit
 ```
 
 To update, run this command.
 
 ```shell
-pip install --upgrade git+https://github.com/ego-lay-atman-bay/luna-kit[cli] --force
+pip install --upgrade luna-kit@[cli]git+https://github.com/ego-lay-atman-bay/luna-kit --force
 ```
 
 # Usage
