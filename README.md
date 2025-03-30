@@ -2,7 +2,7 @@
 This is a toolkit that is used for reading files from the My Little Pony Magic Princess Gameloft game.
 
 # Installation
-You can install Luna Kit by first making sure [python](https://python.org), and [git](https://git-scm.com/) is installed, then run
+You can install Luna Kit by first making sure [python](https://python.org) (version 3.11 and later), and [git](https://git-scm.com/) is installed, then run
 
 ```shell
 pip install luna-kit[cli]@git+https://github.com/ego-lay-atman-bay/luna-kit
