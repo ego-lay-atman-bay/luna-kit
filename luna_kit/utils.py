@@ -1,7 +1,10 @@
 import os
 import pathlib
 from itertools import groupby
-from typing import BinaryIO, Iterable
+from typing import BinaryIO, Iterable, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import PIL.Image
 
 
 def posix_path(path):
@@ -60,6 +63,26 @@ def get_PIL_format(extension: str):
         raise ValueError(msg) from e
     
     return format
+
+def put_alpha(image1: 'PIL.Image.Image', image2: 'PIL.Image.Image'):
+    image2 = image2.convert('L')
+    image1.putalpha(image2)
+    return image1
+
+def image_has_alpha(image: 'PIL.Image.Image', opaque: int = 255) -> bool:
+    if image.info.get("transparency", None) is not None:
+        return True
+    if image.mode == "P":
+        transparent = image.info.get("transparency", -1)
+        for _, index in image.getcolors():
+            if index == transparent:
+                return True
+    elif 'A' in image.mode:
+        extrema = image.getextrema()
+        if extrema[3][0] < 255:
+            return True
+
+    return False
 
 
 def split_name_num(name: str):

@@ -26,6 +26,13 @@ class PVRCommand(CLICommand):
         )
         
         parser.add_argument(
+            '-a', '--no-alpha',
+            dest = 'no_alpha',
+            action = 'store_true',
+            help = "Don't add external .alpha files."
+        )
+        
+        parser.add_argument(
             '-o', '--output',
             dest = 'output',
             help = 'Output file. Can be directory or filename including {name} and {ext}',
@@ -63,7 +70,7 @@ class PVRCommand(CLICommand):
         
         def save_image(file: str, ):
             console.print(f'reading [yellow]{file}[/]')
-            pvr = PVR(file)
+            pvr = PVR(file, external_alpha = not args.no_alpha)
             output = args.output
             name = os.path.splitext(os.path.basename(file))[0]
             dir = os.path.dirname(file)
@@ -133,7 +140,8 @@ class PVRCommand(CLICommand):
             args.files,
             description = 'saving...',
             console = console,
-            
         ):
+            if not args.no_alpha and os.path.splitext(file)[0].endswith('.alpha'):
+                continue
             save_image(file)
         

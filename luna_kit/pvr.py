@@ -1,3 +1,4 @@
+import os
 import struct
 import warnings
 from typing import Annotated, BinaryIO
@@ -11,6 +12,7 @@ except ImportError as e:
     raise e
 
 from .file_utils import PathOrBinaryFile, open_binary
+from .utils import put_alpha, image_has_alpha
 
 
 @dcs.dataclass()
@@ -38,9 +40,15 @@ class MetadataHeader:
 class PVR:
     MAGIC: bytes = b'PVR\x03'
     
-    def __init__(self, file: PathOrBinaryFile | None = None) -> None:
+    def __init__(
+        self,
+        file: PathOrBinaryFile | None = None,
+        external_alpha: bool = True,
+    ) -> None:
         self.header: Header = Header()
+        self.external_alpha = external_alpha
         self.filename: str = ''
+        self.alpha_filename: str = ''
         self.metadata_header: MetadataHeader = MetadataHeader()
         self.metadata = {}
         self.metadata_block = b''
@@ -69,6 +77,7 @@ class PVR:
     def read(self, file: PathOrBinaryFile):
         self.header = Header()
         self.filename = ''
+        self.alpha_filename: str = ''
         self.metadata_header = MetadataHeader()
         self.metadata = {}
         self.metadata_block = b''
@@ -78,10 +87,20 @@ class PVR:
         with open_binary(file) as open_file:
             if isinstance(file, str):
                 self.filename = file
+                if self.external_alpha:
+                    split_filename = os.path.splitext(file)
+                    alpha_filename = f'{split_filename[0]}.alpha{split_filename[1]}'
+                    if os.path.isfile(alpha_filename):
+                        self.alpha_filename = alpha_filename
             
             self.header = self._read_header(open_file)
             self._read_metadata(open_file)
             self.image = self._read_image(open_file)
+        
+        if self.alpha_filename and not image_has_alpha(self.image):
+            alpha = PVR(self.alpha_filename)
+            if alpha.image.size == self.image.size:
+                self.image = put_alpha(self.image, alpha.image)
     
     def _read_header(self, file: BinaryIO):
         header: Header = Header.from_packed(
