@@ -52,6 +52,10 @@ class Header:
     metadata_length: int = 0
     unknown: bytes = b''
     
+    @property
+    def struct_size(self):
+        return dcs.get_struct_size(_HEADER_STRUCTS[self.version])
+    
     def pack(self):
         match self.version:
             case 1:
@@ -61,7 +65,7 @@ class Header:
                     version = self.version
                 )
             case 3 | 4:
-                data  = _v3v4Header(
+                data = _v3v4Header(
                     file_count = self.file_count,
                     metadata_offset = self.metadata_offset,
                     version = self.version,
@@ -123,15 +127,19 @@ class FileMetadata:
     unknown2: bytes
     priority: int
     
-    version: int = 3
+    version: int = 4
 
     @property
     def actual_size(self):
         return self.encrypted_size or self.compressed_size
     
-    def __post_init__(self):
-        
-        self.__save_original()
+    @property
+    def struct_size(self):
+        return dcs.get_struct_size(_METADATA_STRUCTS[self.version])
+    
+    # def __post_init__(self):
+    #     
+    #     self.__save_original()
     
     timestamp_multiplier = 13508
         
@@ -162,8 +170,10 @@ class FileMetadata:
         self.pathname = posix_path(os.path.dirname(path))
         self.filename = posix_path(os.path.basename(path))
     
-    def pack(self):
+    def pack(self, version = None):
         self.__save_original()
+        if version:
+            self.version = version
         match self.version:
             case 1 | 3:
                 data = _v1v3FileMetadataStruct(
@@ -215,6 +225,8 @@ class ARK():
     
     _decompresser = zstandard.ZstdDecompressor()
     
+    __files_block: io.BytesIO
+    
     def __init__(
         self,
         file: str | bytes | bytearray | BinaryIO | None = None,
@@ -232,6 +244,7 @@ class ARK():
         self.__open_file: BinaryIO = None
         self.__close_file: bool = False
         self._files = ARKMetadataCollection()
+        self.__files_block = io.BytesIO()
         self.header = Header()
         
         self.file = file
@@ -322,14 +335,26 @@ class ARK():
             raise TypeError('file must be file-like object open in binary write mode')
         
         file.seek(0)
-        packed_files = self._pack_files()
-        self.header.metadata_offset = dcs.get_struct_size(_v3v4Header) + len(self.unknown_header_data)
-        for data, meta in packed_files:
-            meta.file_location = self.header.metadata_offset
-            self.header.metadata_offset += len(data)
+        file.truncate()
         
-        self._write_header(self.__open_file)
-        self._write_files_and_metadata(self.__open_file, packed_files)
+        metadata_block = self._write_metadata(file)
+        self.header.metadata_offset = self.header.struct_size + len(self.__files_block.getvalue())
+        self.header.metadata_length = len(metadata_block)
+        
+        file.write(self._write_header(file))
+        file.write(self.__files_block.getvalue())
+        file.write(metadata_block)
+        self.__files_block.seek(0)
+        self.__files_block.truncate()
+    
+    def _get_file_block(self, file: BinaryIO):
+        self._files.sort(key = metadata_by_file_location)
+        first_file = self._files[0]
+        self.__files_block.seek(0)
+        self.__files_block.truncate()
+        
+        file.seek(first_file.file_location)
+        self.__files_block.write(file.read(self.header.metadata_offset))
     
     def read_file(self, file: FileMetadata):
         return self._get_file_data(file, self.__open_file)
@@ -374,14 +399,9 @@ class ARK():
     
     
     def _write_header(self, file: IO):
-        file.seek(0)
-        self._files.sort(key = metadata_by_file_location)
         self.header.file_count = len(self._files)
         
-        self.header.metadata_offset = self._files[-1].file_location + (self._files[-1].encrypted_size or self._files[-1].compressed_size)
-        # self.header.metadata_length = 
-        
-        file.write(self.header.pack())
+        return self.header.pack()
 
 
     def _read_metadata(self, file: IO) -> None | list[_v1v3FileMetadataStruct]:
@@ -451,16 +471,6 @@ class ARK():
             ))
 
         return result
-    
-    def _fix_metadata(self, metadata: list[FileMetadata]):
-        for file in metadata:
-
-            file.filename = file.filename.decode('ascii').rstrip('\x00')
-            file.pathname = file.pathname.decode('ascii').rstrip('\x00')
-            file.md5sum = file.md5sum.hex()
-        
-        return metadata
-            
 
     def _get_file_data(self, metadata: FileMetadata, file: BinaryIO):
         file.seek(metadata.file_location, os.SEEK_SET)
@@ -499,23 +509,27 @@ class ARK():
     def _write_file(self, data: bytes, metadata: FileMetadata, file: BinaryIO):
         self._files.sort(key = metadata_by_file_location)
         
+        self._get_file_block(file)
+        
+        header_offset = self.header.struct_size
+        
         if metadata.file_location < 0:
             if len(self._files):
-                metadata.file_location = (self._files[-1].file_location + (self._files[-1].encrypted_size or self._files[-1].compressed_size))
+                metadata.file_location = self._files[-1].file_location + self._files[-1].actual_size
             else:
-                metadata.file_location = dcs.get_struct_size(_HEADER_STRUCTS[self.header.version])
+                metadata.file_location = self.header.struct_size
         if metadata.full_path not in self._files:
-            metadata.file_location = self._files[-1].file_location + (self._files[-1].encrypted_size or self._files[-1].compressed_size)
+            metadata.file_location = self._files[-1].file_location + self._files[-1].actual_size
             self._files.append(metadata)
-            file.seek(metadata.file_location)
-            file.truncate()
-            file.write(data)
-            self.header.metadata_offset = metadata.file_location + (metadata.encrypted_size or metadata.compressed_size)
+            self.__files_block.seek(metadata.file_location - header_offset)
+            self.__files_block.truncate()
+            self.__files_block.write(data)
+            self.header.metadata_offset = metadata.file_location + metadata.actual_size
         else:
             found = self._files[metadata.full_path]
             current_index = self._files.index(found)
-            rest_start = found.file_location + (found.encrypted_size or found.compressed_size)
-            file.seek(rest_start)
+            rest_start = found.file_location + found.actual_size
+            self.__files_block.seek(rest_start - header_offset)
             rest = file.read()
 
             metadata.file_location = found.file_location
@@ -525,8 +539,10 @@ class ARK():
             found.md5sum = metadata.md5sum
             found.priority = metadata.priority
             found.timestamp = metadata.timestamp
+            found.unknown1 = metadata.unknown1
+            found.unknown2 = metadata.unknown2
             
-            file.seek(metadata.file_location)
+            self.__files_block.seek(metadata.file_location - header_offset)
             file.truncate()
             file.write(data)
             offset = file.tell() - rest_start
@@ -534,11 +550,8 @@ class ARK():
 
             for i in range(current_index + 1, len(self._files)):
                 self._files[i].file_location += offset
-            
-            self.header.metadata_offset += offset
         
-        self._write_header(file)
-        self._write_metadata(file)
+        self.write(file)
         
 
     def _pack_files(self) -> list[tuple[bytes, _v1v3FileMetadataStruct]]:
@@ -558,43 +571,27 @@ class ARK():
         self._files.sort(key = metadata_by_file_location)
         print('filesize', get_filesize(file))
         print('metadata_offset', self.header.metadata_offset)
-        file.seek(self.header.metadata_offset)
-        print('current pos', file.tell())
-        expected_size = self.header.file_count * dcs.get_struct_size(_v1v3FileMetadataStruct)
-        file.truncate()
-        if file.tell() != self.header.metadata_offset:
-            self.header.metadata_offset = file.tell()
-            self._write_header()
+
+        expected_size = self.header.file_count * dcs.get_struct_size(_METADATA_STRUCTS[self.header.version])
+        
         metadata_block = b''
         for metadata in self._files:
-            metadata_block += metadata.pack()
+            metadata_block += metadata.pack(self.header.version)
         
         print('expected size:', expected_size)
         print('actual size:', len(metadata_block))
         
         if self.header.version == 1:
             pass
-        elif self.header.version == 3:
+        elif self.header.version in [3, 4]:
             metadata_block = zstandard.compress(metadata_block, 9)
         
         print('compressed size', len(metadata_block))
         metadata_block = xxtea.encrypt(metadata_block, self.KEY)
         print('encrypted size', len(metadata_block))
 
-        file.write(metadata_block)
-
-    def _write_files_and_metadata(self, file: IO, packed_files: list[tuple[bytes, _v1v3FileMetadataStruct]]):
-        metadata_block: bytes = b''
-        for data, meta in packed_files:
-            file.seek(meta.file_location)
-            file.write(data)
-            metadata_block += meta.pack()
-        
-        file.seek(self.header.metadata_offset)
-        metadata_block = zstandard.compress(metadata_block)
-        
-        metadata_block = xxtea.encrypt(metadata_block, self.KEY)
-        file.write(metadata_block)
+        return metadata_block
+    
         
 class ARKFile():
     def __init__(
@@ -623,7 +620,7 @@ class ARKFile():
             date = datetime.fromtimestamp(date)
         if date is None:
             date = datetime.now()
-        self.date = date
+        self.timestamp = date
     
     @property
     def filename(self) -> str:
@@ -680,8 +677,8 @@ class ARKFile():
             file.write(self.data)
         
         
-        if self.date > datetime.now():
-            logging.debug(f'{self.fullpath} date {self.date} is after today {datetime.now()}')
+        if self.timestamp > datetime.now():
+            logging.debug(f'{self.fullpath} date {self.timestamp} is after today {datetime.now()}')
         
         # os.utime(path, (self.date.timestamp(),))
     
@@ -694,7 +691,7 @@ class ARKFile():
             original_filesize = len(result),
             compressed_size = 0,
             encrypted_size = 0,
-            timestamp = 0,
+            timestamp = self.timestamp.timestamp(),
             md5sum = bytes.fromhex(hashlib.md5(result).hexdigest()),
             priority = self.priority,
         )

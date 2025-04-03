@@ -52,15 +52,15 @@ class ARKParser(CLICommand):
     @classmethod
     def run_command(cls, args: Namespace):
         import os
-        from glob import glob
-
+        
         from ..ark import ARK
+        from ..ark_filename import sort_ark_filenames
             
         output = './'
         
         files: list[str] = args.files
         
-        files.sort()
+        files = sort_ark_filenames(files)
         
         if len(files) == 0:
             console.print('[red]No files found[/]')
