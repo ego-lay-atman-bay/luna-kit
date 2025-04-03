@@ -1,5 +1,6 @@
 from argparse import ArgumentParser, Namespace
 from .cli import CLI, CLICommand
+from ._actions import GlobFiles
 
 @CLI.register_command
 class AtlasCommand(CLICommand):
@@ -11,6 +12,7 @@ class AtlasCommand(CLICommand):
         parser.add_argument(
             'files',
             nargs = '+',
+            action = GlobFiles,
             help = 'input .texatlas file(s)',
         )
         
@@ -49,10 +51,7 @@ class AtlasCommand(CLICommand):
         from ..console import console
         from rich.progress import track
             
-        files: list[str] = []
-        
-        for pattern in args.files:
-            files.extend(glob(pattern, recursive = True))
+        files: list[str] = args.files
         
         
         search_folders: list[str] = args.search_folders
