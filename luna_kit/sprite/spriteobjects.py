@@ -198,6 +198,9 @@ class Module(BaseObject):
 @register_object
 class Frame(BaseObject):
     TAG = 'FRAME'
+    
+    def __init__(self, FMi: 'list[FrameFM]', RCi: 'list[FrameRC]'):
+        super().__init__()
 
     @classmethod
     def parse_element(cls, element):
@@ -212,8 +215,82 @@ class Frame(BaseObject):
 
         if frame_block is not None:
             for param in frame_block:
-                if isinstance(param, SpriteHex):
+                if isinstance(param, SpriteComment):
+                    continue
+                elif isinstance(param, SpriteHex):
                     frame_id = param
-                
-        
+                    
+                elif isinstance(param, SpriteElement):
+                    sub_parser = ElementParser(cls._filter_sprite_element(param), initial_index = 0)
+                    _frame_id = sub_parser.next_param(SpriteHex)
+                    if isinstance(_frame_id, SpriteHex):
+                        frame_id = _frame_id
+                    else:
+                        if FrameFM.check(param):
+                            FMi.append(FrameFM.parse_element(param))
+                        elif FrameRC.check(param):
+                            FMi.append(FrameRC.parse_element(param))
+                        
         return cls()
+
+@register_object
+class FrameFM(BaseObject):
+    TAG = 'FM'
+    
+    def __init__(
+        self,
+        module_or_frame_id: SpriteHex,
+        ox: int,
+        oy: int,
+    ):
+        self.module_or_frame_id = module_or_frame_id
+        self.ox = ox
+        self.oy = oy
+    
+    @classmethod
+    def parse_element(cls, element):
+        parser = ElementParser(cls._filter_sprite_element(element))
+        
+        module_or_frame_id = parser.next_param(SpriteHex)
+        ox = parser.next_param(int)
+        oy = parser.next_param(int)
+
+        try:
+            flags = next(parser)
+            if flags is not None:
+                print(flags)
+        except StopIteration:
+            pass
+        
+        return cls(
+            module_or_frame_id = module_or_frame_id,
+            ox = ox,
+            oy = oy,
+        )
+
+@register_object
+class FrameRC(BaseObject):
+    TAG = 'RC'
+    
+    def __init__(
+        self,
+        x1: int,
+        y1: int,
+        x2: int,
+        y2: int,
+    ):
+        self.x1 = x1
+        self.y1 = y1
+        self.x2 = x2
+        self.y2 = y2
+    
+    @classmethod
+    def parse_element(cls, element):
+        parser = ElementParser(cls._filter_sprite_element(element))
+        
+        return cls(
+            x1 = parser.next_param(int),
+            y1 = parser.next_param(int),
+            x2 = parser.next_param(int),
+            y2 = parser.next_param(int),
+        )
