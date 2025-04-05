@@ -1,8 +1,10 @@
+import os
 from typing import Type
 
 from ..file_utils import PathOrTextFile
 from .parser import SpriteParser
-from .spriteobjects import get_object, Image, Modules, Frame, Animation, Version
+from .spriteobjects import (Animation, Frame, Image, Modules, Version,
+                            get_object)
 from .types import (SpriteBlock, SpriteComment, SpriteDocument, SpriteElement,
                     SpriteHex, SpriteName, SpriteStr, SpriteType)
 
@@ -16,10 +18,10 @@ class Sprite:
     ):
         self.filename = ''
         self.version = 1
-        self.images = []
-        self.modules = []
-        self.frames = []
-        self.animations = []
+        self.images: list[Image] = []
+        self.modules: list[Modules] = []
+        self.frames: list[Frame] = []
+        self.animations: list[Animation] = []
         
         if file is not None:
             self.read(file, parser_class = parser_class)
