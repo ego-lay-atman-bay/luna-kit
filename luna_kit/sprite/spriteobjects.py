@@ -118,8 +118,11 @@ class Image(BaseObject):
 class Modules(UserList, BaseObject):
     TAG = 'MODULES'
     
-    def __init__(self, modules: 'list[Module]'):
-        super().__init__(modules)
+    def __init__(self, modules: 'list[Module] | None' = None):
+        if modules is None:
+            super().__init__()
+        else:
+            super().__init__(modules)
     
     @classmethod
     def parse_element(cls, element):
