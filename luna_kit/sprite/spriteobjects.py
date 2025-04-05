@@ -199,8 +199,17 @@ class Module(BaseObject):
 class Frame(BaseObject):
     TAG = 'FRAME'
     
-    def __init__(self, FMi: 'list[FrameFM]', RCi: 'list[FrameRC]'):
-        super().__init__()
+    def __init__(
+        self,
+        desc: SpriteStr,
+        frame_id: SpriteHex,
+        FMi: 'list[FrameFM]',
+        RCi: 'list[FrameRC]',
+    ):
+        self.desc = desc
+        self.frame_id = frame_id
+        self.FMi = FMi
+        self.RCi = RCi
 
     @classmethod
     def parse_element(cls, element):
@@ -230,8 +239,15 @@ class Frame(BaseObject):
                             FMi.append(FrameFM.parse_element(param))
                         elif FrameRC.check(param):
                             FMi.append(FrameRC.parse_element(param))
+                        else:
+                            raise ValueError(f'Cannot parse {param}')
                         
-        return cls()
+        return cls(
+            desc = desc,
+            frame_id = frame_id,
+            FMi = FMi,
+            RCi = RCi,
+        )
 
 @register_object
 class FrameFM(BaseObject):
@@ -293,4 +309,90 @@ class FrameRC(BaseObject):
             y1 = parser.next_param(int),
             x2 = parser.next_param(int),
             y2 = parser.next_param(int),
+        )
+
+@register_object
+class Animation(BaseObject):
+    TAG = "ANIM"
+    
+    def __init__(
+        self,
+        desc: SpriteStr,
+        animation_id: SpriteHex,
+        frames: 'list[AnimationFrame]',
+    ):
+        self.desc = desc
+        self.animation_id = animation_id
+        self.frames = frames
+
+    @classmethod
+    def parse_element(cls, element):
+        parser = ElementParser(cls._filter_sprite_element(element))
+
+        desc = parser.next_param(SpriteStr)
+        frames_block = parser.next_param(SpriteBlock)
+
+        animation_id = None
+        frames: list[AnimationFrame] = []
+        
+        if frames_block is not None:
+            for frame in frames_block:
+                if isinstance(frame, SpriteComment):
+                    continue
+                elif isinstance(frame, SpriteHex):
+                    animation_id = frame
+                    
+                elif isinstance(frame, SpriteElement):
+                    sub_parser = ElementParser(cls._filter_sprite_element(frame), initial_index = 0)
+                    _animation_id = sub_parser.next_param(SpriteHex)
+                    if isinstance(_animation_id, SpriteHex):
+                        animation_id = _animation_id
+                    else:
+                        frames.append(AnimationFrame.parse_element(frame))
+        
+        return cls(
+            desc = desc,
+            animation_id = animation_id,
+            frames = frames,
+        )
+
+@register_object
+class AnimationFrame(BaseObject):
+    TAG = "AF"
+    
+    def __init__(
+        self,
+        frame_id: SpriteHex,
+        time: int,
+        ox: int,
+        oy: int,
+    ):
+        self.frame_id = frame_id
+        self.time = time
+        self.ox = ox
+        self.oy = oy
+    
+    @classmethod
+    def parse_element(cls, element):
+        parser = ElementParser(cls._filter_sprite_element(element))
+
+        frame_id = parser.next_param(SpriteHex)
+        time = parser.next_param(int)
+        ox = parser.next_param(int)
+        oy = parser.next_param(int)
+        
+        flags = None
+        
+        try:
+            flags = next(parser)
+            if flags is not None:
+                print(flags)
+        except StopIteration:
+            pass
+
+        return cls(
+            frame_id = frame_id,
+            time = time,
+            ox = ox,
+            oy = oy,
         )
