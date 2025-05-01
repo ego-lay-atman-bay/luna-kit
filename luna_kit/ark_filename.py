@@ -111,9 +111,6 @@ class ARKFilename:
         'mlpextra',
         'mlpextra2',
         'mlpdata',
-        'mlpextragui',
-        'mlpextra',
-        'mlpextra2',
     ]
     
     def get_priority(self, value: str, priority_list: list[str]):
