@@ -24,6 +24,39 @@ luna-kit -h
 
 If that doesn't work, use `python -m luna_kit` instead of `luna-kit` (if you're on windows, you can use `py` instead of `python`).
 
+### Downloading assets and `.ark` files
+
+You can get the `.ark` files from your android device (in `/Android/data/com.gameloft.ANMP.GloftPOHM/files`) or download the `.ark` files directly (including ones that aren't downloaded by the game).
+
+To download `.ark` files use the `download` command.
+
+```shell
+luna-kit download --version 10.2.0q -o "ark files/"
+```
+
+By default it will only download the same ones that the android game downloads (in addition to the one in the apk), however you can specify some arguments to change which files it downloads.
+
+Options with `{}` are the defaults.
+
+- `-c, --calibre [low,high,{veryhigh},all] ...` 
+- `-t, --tag [{mlpextra,mlpdata,mlpextragui,mlpextra2,softdlc},video] ...`
+- `-f, --files [all,{ark},arkdiff,other] ...`
+- `-a, --astc-manifest` Download from astc_dlc_manifest (main android manifest)
+- `-d, --dlc-manifest` Download from dlc_manifest (ios manifest and alternative android files)
+- `--dry-run` Only print files that would be downloaded
+
+So to download every single file, run
+
+```shell
+luna-kit download --version 10.2.0q -o "ark files/" -d -a -c all -f all
+```
+
+You can also specify the platform between `android` and `ios` (it defaults to `android`). You can download every single ark file, including the one in the apk from the server, however you can't download the ark files in the ipa for ios (which have everything except the `softdlc` ark files).
+
+```shell
+luna-kit download --version 10.2.0q -p ios -o "ark files/"
+```
+
 ## Extracting `.ark` files
 
 Extract `.ark` files with this command
@@ -82,6 +115,7 @@ If you are writing a script that uses luna-kit, it is important to know all the 
 - `[pvr]`: Required for reading `.pvr` files
 - `[model]`: Required for reading `.rk` and `.anim` files (and for doing transformations)
 - `[rk]`: Barebones requirements for reading `.rk` and `.anim` files
+- `[download]`: Everything needed to downloaded ark files
 - `[cli]`: Everything needed to run the cli
 - `[all]`: Includes Everything but the cli specific stuff (`rich`)
 

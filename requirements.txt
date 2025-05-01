@@ -15,5 +15,8 @@ pygltflib==1.16.3
 texture2ddecoder==1.0.5
 scipy==1.15.2
 
+requests==2.32.3
+furl==2.1.4
+
 # for __blender_hook.py
 fake-bpy-module
