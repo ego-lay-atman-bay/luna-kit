@@ -11,7 +11,7 @@ from copy import deepcopy
 from ctypes import *
 from dataclasses import dataclass
 from datetime import datetime
-from typing import IO, Annotated, Any, BinaryIO
+from typing import IO, Annotated, Any, BinaryIO, Type
 
 try:
     import dataclasses_struct as dcs
@@ -207,7 +207,7 @@ class FileMetadata:
         return data.pack()
             
 
-_METADATA_STRUCTS: dict[int, _v1v3FileMetadataStruct | _v4FileMetadataStruct] = {
+_METADATA_STRUCTS: dict[int, Type[_v1v3FileMetadataStruct] | Type[_v4FileMetadataStruct]] = {
     1: _v1v3FileMetadataStruct,
     3: _v1v3FileMetadataStruct,
     4: _v4FileMetadataStruct,
@@ -241,7 +241,7 @@ class ARK():
             file (str | bytes | bytearray | BinaryIO | None, optional): Input file. Defaults to None.
             output (str | None, optional): Optional output folder to extract files to. Defaults to None.
         """
-        self.__open_file: BinaryIO = None
+        self.__open_file: BinaryIO | None = None
         self.__close_file: bool = False
         self._files = ARKMetadataCollection()
         self.__files_block = io.BytesIO()
