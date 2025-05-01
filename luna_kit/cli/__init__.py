@@ -5,4 +5,5 @@ from . import sheet
 from . import xml
 from . import json_cmd
 from . import pvr
+from . import download
 from .cli import CLI
