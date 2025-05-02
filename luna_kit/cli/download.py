@@ -46,12 +46,12 @@ class DownloadCommand(CLICommand):
             help = 'Download from dlc_manifest',
         )
         
-        parser.add_argument(
-            '-m', '--manifest',
-            dest = 'manifest',
-            help = 'Select which ',
-            action = 'store_true',
-        )
+        # parser.add_argument(
+        #     '-m', '--manifest',
+        #     dest = 'manifest',
+        #     help = 'Select which ',
+        #     action = 'store_true',
+        # )
         
         parser.add_argument(
             '-c', '--calibre',
