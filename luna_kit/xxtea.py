@@ -13,7 +13,9 @@ def get_phdr_size(phdr_off: int):
     return phdr_off
 
 
-def decrypt(src: bytes | bytearray, n: int, key: Annotated[list[int], 4]):
+def decrypt(src: bytes | bytearray, key: Annotated[list[int], 4]):
+    n = get_phdr_size(len(src)) // 4
+    
     v = [c_uint(x) for x in struct.unpack(
         f'{n}I',
         src,
@@ -52,10 +54,10 @@ def decrypt(src: bytes | bytearray, n: int, key: Annotated[list[int], 4]):
     return b''.join([bytes(x) for x in v])
 
 def encrypt(src: bytes | bytearray, key: Annotated[list[int], 4]):
-    n = len(src) / 4
-    if n != math.floor(n):
+    n = get_phdr_size(len(src)) // 4
+
+    if n != len(src) // 4:
         src += b'\x00' * (4 - (len(src) % 4))
-        n = len(src) // 4
 
     v = [c_uint(x) for x in struct.unpack(
         f'{n}I',
