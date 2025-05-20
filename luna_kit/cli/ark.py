@@ -23,7 +23,7 @@ class ARKParser(CLICommand):
         )
         
         parser.add_argument(
-            '-f', '--separate-folders',
+            '-s', '--separate-folders',
             dest = 'separate_folders',
             help = 'Output each .ark file in separate folders',
             action = 'store_true',
@@ -43,6 +43,12 @@ class ARKParser(CLICommand):
         )
         
         parser.add_argument(
+            '-f', '--filter',
+            dest = 'filter',
+            help = 'Filter extracted files based on glob pattern',
+        )
+        
+        parser.add_argument(
             '-v', '--data-version',
             dest = 'data_version',
             action = 'store_true',
@@ -52,6 +58,7 @@ class ARKParser(CLICommand):
     @classmethod
     def run_command(cls, args: Namespace):
         import os
+        import fnmatch
         
         from ..ark import ARK
         from ..ark_filename import sort_ark_filenames
@@ -60,7 +67,10 @@ class ARKParser(CLICommand):
         
         files: list[str] = args.files
         
-        files = sort_ark_filenames(files)
+        try:
+            files = sort_ark_filenames(files)
+        except ValueError:
+            files.sort()
         
         if len(files) == 0:
             console.print('[red]No files found[/]')
@@ -79,6 +89,9 @@ class ARKParser(CLICommand):
                 console = console,
                 description = 'Extracting...',
             ):
+                if args.filter and (not fnmatch.fnmatch(file_metadata.full_path, args.filter)):
+                    continue
+                
                 console.print(f'extracting: [yellow]{file_metadata.full_path}[/yellow]')
                 try:
                     file = ark_file.read_file(file_metadata)
