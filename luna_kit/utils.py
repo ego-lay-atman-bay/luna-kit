@@ -45,7 +45,7 @@ def read_ascii_string(file: BinaryIO | bytes, length: int = 64) -> str:
     else:
         data = file.read(length)
 
-    return data.strip(b'\x00').decode('ascii', errors='ignore')
+    return data.split(b'\x00', 1)[0].decode('ascii', errors='ignore')
 
 
 def get_PIL_format(extension: str):
