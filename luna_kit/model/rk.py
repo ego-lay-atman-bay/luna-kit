@@ -40,13 +40,19 @@ class SectionHeader:
     byte_length: int
 
 def parse_rkm(filename: str):
-    with open(filename, 'r', newline = '') as file:
-        data = [row for row in csv.reader(file, delimiter='=') if len(row)]
-    
-    return RKM(
-        filename = filename,
-        **dict(data),
-    )
+    if os.path.exists(filename):
+        with open(filename, 'r', newline = '') as file:
+            data = [row for row in csv.reader(file, delimiter='=') if len(row)]
+        
+        return RKM(
+            filename = filename,
+            **dict(data),
+        )
+    else:
+        return RKM(
+            filename = filename,
+            DiffuseTexture = os.path.splitext(os.path.basename(filename))[0],
+        )
 
 class RKModel:
     MAGIC = b'RKFORMAT'
@@ -257,12 +263,12 @@ class RKModel:
                 os.path.dirname(self.filename),
                 name + '.rkm',
             )
-            if not os.path.exists(rkm):
-                name = materials[-1].name
-                rkm = os.path.join(
-                    os.path.dirname(self.filename),
-                    name + '.rkm',
-                )
+            # if not os.path.exists(rkm):
+            #     name = materials[-1].name
+            #     rkm = os.path.join(
+            #         os.path.dirname(self.filename),
+            #         name + '.rkm',
+            #     )
                 
             materials.append(Material(
                 name = name,
@@ -499,7 +505,7 @@ class RKM:
     DiffuseTexture: str = ''
     ClampMode: Literal['RK_REPEAT', 'RK_CLAMP'] = 'RK_REPEAT'
     BlendMode: Literal['alpha', 'add', 'none'] = 'none'
-    DepthWrite: bool = 0
+    DepthWrite: bool = False
     DepthTest: float = 0
     Cull: bool = False
     Shader: str = ''
@@ -535,6 +541,9 @@ class RKM:
     @property
     def image(self):
         filename = os.path.join(self.dir, self.texture_name)
+        if not os.path.exists(filename):
+            return None
+        
         if not self.NoCompress:
             image = PVR(filename).image
         else:
@@ -581,7 +590,7 @@ class Material:
     @property
     def properties(self) -> 'RKM':
         if not hasattr(self, '_info'):
-            self._info = parse_rkm(self.rkm)
+            self._info: RKM = parse_rkm(self.rkm)
         
         return self._info
     
