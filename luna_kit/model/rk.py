@@ -92,6 +92,7 @@ class RKModel:
                 self.filename = file
             
             self.header = self._read_header(open_file)
+            self.name = read_ascii_string(self.header.name)
             self.section_headers = self._read_sections_header(open_file)
             self.attributes = self._read_attributes(open_file)
             self.materials = self._read_materials(open_file)
