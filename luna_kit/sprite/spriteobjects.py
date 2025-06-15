@@ -9,7 +9,7 @@ from .types import (SpriteBlock, SpriteComment, SpriteElement, SpriteHex,
 
 OBJECTS: 'list[Type[BaseObject]]' = []
 
-def register_object(object: 'BaseObject'):
+def register_object(object: 'Type[BaseObject]'):
     if not issubclass(object, BaseObject):
         raise TypeError('object must inherit from BaseObject')
     
@@ -67,7 +67,7 @@ class Version(BaseObject):
         return cls(parser.next_param(int))
 
 @register_object
-class Image(BaseObject):
+class SpriteImage(BaseObject):
     TAG = 'IMAGE'
 
     SPEC = 'IMAGE [id] "file" [ALPHA "alpha_file"] [TRANSP transp_color]'

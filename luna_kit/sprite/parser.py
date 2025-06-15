@@ -1,5 +1,6 @@
 import os
 from typing import Literal, TextIO
+import io
 
 from ..file_utils import PathOrTextFile, is_eof, open_text_file, peek
 from .types import (SpriteDocument, SpriteBlock, SpriteComment, SpriteElement, SpriteHex,
@@ -10,17 +11,26 @@ class SpriteParser:
     def __init__(self, file: PathOrTextFile):
         self.filename = ''
         self.elements = SpriteDocument()
-        self.read(file)
+        
+        self.file = file
     
-    def read(self, file: PathOrTextFile):
+    def __enter__(self):
         self.filename = ''
         self.elements = SpriteDocument()
+        if os.path.isfile(self.file):
+            self.filename = os.path.abspath(self.file)
+        self.__open_file = open_text_file(self.file, 'r')
+
+        return self.parse(self.__open_file.__enter__())
         
-        if os.path.isfile(file):
-            self.filename = os.path.abspath(file)
+    def __exit__(self, *args, **kwargs):
+        self.__open_file.__exit__(*args, **kwargs)
+    
+    def read(self, file: PathOrTextFile):
+        
         
         with open_text_file(file) as open_file:
-            self.elements = self.parse(open_file)
+            return self.parse(open_file)
     
     def parse(self, file: TextIO):
         return self._parse_block(file)
@@ -35,7 +45,8 @@ class SpriteParser:
         while not is_eof(file):
             comment = self._check_comment(file)
             if comment:
-                elements.append(comment)
+                # elements.append(comment)
+                yield level, comment
                 if not comment.multiline:
                     continue
             
@@ -43,11 +54,12 @@ class SpriteParser:
             if char == '\\':
                 file.read(1)
             elif char == '{':
-                block = self._parse_block(file, level + 1)
-                if len(elements) and isinstance(elements[-1], SpriteElement):
-                    elements[-1].append(block)
-                else:
-                    elements.append(block)
+                yield from self._parse_block(file, level + 1)
+                
+                # if len(elements) and isinstance(elements[-1], SpriteElement):
+                #     elements[-1].append(block)
+                # else:
+                #     elements.append(block)
             elif char == '}':
                 break
             elif char == ' ' or char == '\t':
@@ -56,9 +68,9 @@ class SpriteParser:
                 file.seek(file.tell()-1)
                 element = self._parse_element(file, level)
                 if len(element):
-                    elements.append(element)
+                    yield level, element
         
-        return elements
+        # return elements
     
     def _parse_element(self, file: TextIO, level = 0):
         element = SpriteElement()
@@ -91,7 +103,9 @@ class SpriteParser:
                 if part:
                     element.append(self._convert_type(part))
                     part = ''
-                element.append(self._parse_block(file, level + 1))
+                file.seek(file.tell()-1)
+                break
+                # yield from self._parse_block(file, level + 1)
             elif char == '}':
                 file.seek(file.tell() - 1)
                 break

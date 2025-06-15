@@ -3,7 +3,7 @@ from typing import Type
 
 from ..file_utils import PathOrTextFile
 from .parser import SpriteParser
-from .spriteobjects import (Animation, Frame, Image, Modules, Version,
+from .spriteobjects import (Animation, Frame, SpriteImage, Modules, Version,
                             get_object)
 from .types import (SpriteBlock, SpriteComment, SpriteDocument, SpriteElement,
                     SpriteHex, SpriteName, SpriteStr, SpriteType)
@@ -18,7 +18,7 @@ class Sprite:
     ):
         self.filename = ''
         self.version = 1
-        self.images: list[Image] = []
+        self.image_defs: list[SpriteImage] = []
         self.modules: list[Modules] = []
         self.frames: list[Frame] = []
         self.animations: list[Animation] = []
@@ -34,10 +34,13 @@ class Sprite:
     ):
         self.filename = ''
         self.version = 1
-        self.images = []
+        self.image_defs = []
         self.modules = []
         self.frames = []
         self.animations = []
+        
+        if isinstance(file, str):
+            self.filename = file
         
         sprite_doc = parser_class(file).elements
         
@@ -61,8 +64,8 @@ class Sprite:
                 obj = get_object(filtered)
                 if obj is not None:
                     match obj.TAG:
-                        case Image.TAG:
-                            self.images.append(obj)
+                        case SpriteImage.TAG:
+                            self.image_defs.append(obj)
                         case Modules.TAG:
                             self.modules.append(obj)
                         case Frame.TAG:
