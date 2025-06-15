@@ -39,7 +39,10 @@ xml = [
 ]
 
 texatlas = [
+  "dataclasses-struct",
   "Pillow",
+  # "astc-encoder-py",
+  "texture2ddecoder",
 ]
 
 pvr = [
