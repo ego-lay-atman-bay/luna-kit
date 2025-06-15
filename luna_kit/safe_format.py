@@ -1,4 +1,5 @@
 import re
+from typing import Any
 
 class FormattedList(list):
     def __format__(self, format_spec: str) -> str:
@@ -31,7 +32,7 @@ class SafeFormatDict(dict):
     def __getitem__(self, key):
         return EscapeFormat(super().__getitem__(key))
 
-def safe_format(string: str, **values: dict[str,str]):
+def safe_format(string: str, **values):
     for key in values:
         try:
             values[key] = int(values[key])
