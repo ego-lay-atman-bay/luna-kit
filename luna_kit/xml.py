@@ -1,4 +1,5 @@
 import os
+from typing import overload, Literal
 
 try:
     import charset_normalizer
@@ -10,12 +11,48 @@ except ImportError as e:
 from .file_utils import PathOrBinaryFile, PathOrFile, is_file_like, open_binary
 
 
+@overload
+def parse_xml(
+    file: PathOrBinaryFile,
+) -> etree._Element: ...
+@overload
+def parse_xml(
+    file: PathOrBinaryFile,
+    *,
+    as_tree: Literal[False],
+) -> etree._Element: ...
+@overload
+def parse_xml(
+    file: PathOrBinaryFile,
+    *,
+    as_tree: Literal[True],
+) -> etree._ElementTree: ...
+@overload
+def parse_xml(
+    file: PathOrBinaryFile,
+    *,
+    with_encoding: Literal[True]
+) -> tuple[etree._Element, str]: ...
+@overload
+def parse_xml(
+    file: PathOrBinaryFile,
+    *,
+    as_tree: Literal[False],
+    with_encoding: Literal[True]
+) -> tuple[etree._Element, str]: ...
+@overload
+def parse_xml(
+    file: PathOrBinaryFile,
+    *,
+    as_tree: Literal[True],
+    with_encoding: Literal[True]
+) -> tuple[etree._ElementTree, str]: ...
 def parse_xml(
     file: PathOrBinaryFile,
     *,
     as_tree: bool = False,
     with_encoding: bool = False,
-) -> tuple[list[etree._Element], str]:
+):
     encoding = None
     best = None
     
