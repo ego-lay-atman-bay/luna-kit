@@ -11,7 +11,7 @@ pip install luna-kit[cli]@git+https://github.com/ego-lay-atman-bay/luna-kit
 To update, run this command.
 
 ```shell
-pip install --upgrade luna-kit@[cli]git+https://github.com/ego-lay-atman-bay/luna-kit --force
+pip install --upgrade luna-kit[cli]@git+https://github.com/ego-lay-atman-bay/luna-kit --force
 ```
 
 # Usage
