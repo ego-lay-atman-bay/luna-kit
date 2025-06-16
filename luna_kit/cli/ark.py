@@ -59,13 +59,20 @@ class ARKParser(CLICommand):
     def run_command(cls, args: Namespace):
         import os
         import fnmatch
+        from glob import glob
         
         from ..ark import ARK
         from ..ark_filename import sort_ark_filenames
             
         output = './'
         
-        files: list[str] = args.files
+        files: list[str] = []
+
+        for file in args.files:
+            if os.path.isdir(file):
+                files.extend(glob(os.path.join(file, '*.ark')))
+            else:
+                files.append(file)
         
         try:
             files = sort_ark_filenames(files)
