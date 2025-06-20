@@ -180,24 +180,28 @@ class DumpCommand(CLICommand):
                 dir = os.path.dirname(ark_filename),
             ))
             extracted_folders.add(folder)
-            with ARK(ark_filename) as ark:
-                for file_metadata in track(
-                    ark.files,
-                    description = os.path.basename(ark_filename),
-                    transient = True,
-                ):
-                    if args.filter and (not fnmatch(file_metadata.full_path, args.filter)):
-                        continue
-                    try:
-                        file = ark.extract(file_metadata)
-                        filepath = os.path.join(folder, file_metadata.full_path)
-                        file.save(filepath)
-                    except Exception as e:
-                        e.add_note(f'filename: {file_metadata.full_path}')
-                        if args.ignore_errors:
-                            console.print(e)
-                        else:
-                            raise e
+            try:
+                with ARK(ark_filename) as ark:
+                    for file_metadata in track(
+                        ark.files,
+                        description = os.path.basename(ark_filename),
+                        transient = True,
+                    ):
+                        if args.filter and (not fnmatch(file_metadata.full_path, args.filter)):
+                            continue
+                        try:
+                            file = ark.extract(file_metadata)
+                            filepath = os.path.join(folder, file_metadata.full_path)
+                            file.save(filepath)
+                        except Exception as e:
+                            e.add_note(f'filename: {file_metadata.full_path}')
+                            if args.ignore_errors:
+                                console.print(e)
+                            else:
+                                raise e
+            except Exception as e:
+                e.add_note(f'ark: {os.path.basename(ark_filename)}')
+                raise e
             
         if args.loc:
             console.print('Converting loc files')
@@ -296,7 +300,7 @@ class DumpCommand(CLICommand):
                 if pvr_file.endswith('.alpha.pvr'):
                     continue
 
-                pvr = PVR(pvr_file)
+                pvr = PVR(pvr_file, external_alpha = True)
                 pvr.save(f'{os.path.splitext(pvr_file)[0]}.{args.pvr_format}')
 
         console.print('Finished!')
