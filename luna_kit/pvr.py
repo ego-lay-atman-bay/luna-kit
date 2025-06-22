@@ -160,6 +160,32 @@ class PVR:
             format = struct.unpack('I', self.header.format)[0]
             
             match format:
+                case 6:
+                    decoded_bytes = texture2ddecoder.decode_etc1(
+                        self.image_data,
+                        self.header.width,
+                        self.header.height,
+                    )
+                    image = Image.frombytes(
+                        "RGBA",
+                        (self.header.width, self.header.height),
+                        decoded_bytes,
+                        "raw",
+                        ('BGRA'),
+                    )
+                case 23:
+                    decoded_bytes = texture2ddecoder.decode_etc2a8(
+                        self.image_data,
+                        self.header.width,
+                        self.header.height,
+                    )
+                    image = Image.frombytes(
+                        "RGBA",
+                        (self.header.width, self.header.height),
+                        decoded_bytes,
+                        "raw",
+                        ('BGRA'),
+                    )
                 case 34:
                     decoded_bytes = texture2ddecoder.decode_astc(
                         self.image_data,
@@ -174,21 +200,8 @@ class PVR:
                         "raw",
                         ('BGRA'),
                     )
-                case 6:
-                    decoded_bytes = texture2ddecoder.decode_etc1(
-                        self.image_data,
-                        self.header.width,
-                        self.header.height,
-                    )
-                    image = Image.frombytes(
-                        "RGBA",
-                        (self.header.width, self.header.height),
-                        decoded_bytes,
-                        "raw",
-                        ('BGRA'),
-                    )
                 case _:
-                    raise NotImplementedError(f'Format {self.header.format} not implemented')
+                    raise NotImplementedError(f'Format {format} not implemented')
         
         return image
     
