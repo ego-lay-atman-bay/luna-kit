@@ -299,8 +299,12 @@ class DumpCommand(CLICommand):
             ):
                 if pvr_file.endswith('.alpha.pvr'):
                     continue
-
+                
+                output = f'{os.path.splitext(pvr_file)[0]}.{args.pvr_format}'
+                if os.path.exists(output):
+                    continue
                 pvr = PVR(pvr_file, external_alpha = True)
-                pvr.save(f'{os.path.splitext(pvr_file)[0]}.{args.pvr_format}')
+                pvr.save(output)
+                globals()
 
         console.print('Finished!')
