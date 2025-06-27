@@ -145,15 +145,20 @@ class DumpCommand(CLICommand):
                     description = description,
                 )
 
-        def glob_files(pattern: str, folders: list[str] | set[str]) -> set[str]:
-            files = set()
+        def glob_files(pattern: str, folders: list[str] | set[str], with_parent: bool = False) -> set[str] | list[tuple[str, str]]:
+            files = [] if with_parent else set()
             for folder in folders:
-                files |= {os.path.join(folder, file) for file in glob(
+                new_files = {(folder, os.path.join(folder, file)) for file in glob(
                     pattern,
                     root_dir = folder,
                     recursive = True,
                     include_hidden = True,
                 )}
+
+                if with_parent:
+                    files += new_files
+                else:
+                    files |= {file[1] for file in new_files}
             return files
 
         base_output = args.output
@@ -265,13 +270,13 @@ class DumpCommand(CLICommand):
     
         if args.atlas:
             console.print('Splitting texatlas files')
-            atlas_files = glob_files('*/**.texatlas', extracted_folders)
+            atlas_files: dict[str, str] = glob_files('*/**.texatlas', extracted_folders, with_parent = True)
 
             with Progress(*COLUMNS, console = console, transient = True) as progress:
                 atlas_progress = progress.add_task('Splitting...')
                 files_progress = progress.add_task('Splitting...', total = len(atlas_files))
 
-                for atlas_filename in atlas_files:
+                for atlas_folder, atlas_filename in atlas_files:
                     atlas = TexAtlas(atlas_filename)
                     progress.update(
                         atlas_progress,
@@ -280,7 +285,7 @@ class DumpCommand(CLICommand):
                         completed = 0,
                     )
                     for image in atlas.images:
-                        image_filename = os.path.join(image.dir, image.filename)
+                        image_filename = os.path.join(atlas_folder, image.filename)
                         if not os.path.exists(image_filename):
                             os.makedirs(os.path.dirname(image_filename), exist_ok = True)
                             image.image.save(image_filename)
