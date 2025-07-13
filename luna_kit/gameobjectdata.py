@@ -252,6 +252,8 @@ class GameObjectData(dict):
                 category[item_id] = item
                         
     def _parse_game_value(self, value: str, type: Literal['string', 'stringWithDefault', 'int', 'float', 'bool']):
+        if value is None:
+            return None
         match type:
             case 'bool':
                 return strToBool(value)
