@@ -242,13 +242,50 @@ class GameObjectData(dict):
             category_name = category_xml.attrib.get('Name')
             category = ShopItemCategory(category_name, category_xml.attrib)
             self.shopdata[category_name] = category
+            category_info = self.CATEGORY_DATA.setdefault(category_name, {})
+            shopdata_info = category_info.get('ShopDataXml', {})
+            parameter_info = shopdata_info.get('attributes', {})
 
             for item_xml in category_xml:
                 if item_xml.tag != 'ShopItem':
                     continue
                 
                 item_id = item_xml.attrib.get('ID')
-                item = ShopItem(item_id, category_name, item_xml.attrib)
+
+                item_data = {}
+
+                for attribute_name, attribute_info in parameter_info.items():
+
+                    if attribute_info['array_length'] > 0:
+                        attribute_data = []
+                        if item_xml is not None:
+                            attribute_xml = item_xml.find(attribute_name)
+                            if attribute_xml is not None:
+                                for item in attribute_xml:
+                                    attribute_data.append(self._parse_game_value(
+                                        item.attrib.get('Value', ''), 
+                                        attribute_info['type'],
+                                    ))
+                            elif attribute_info['default'] is not None:
+                                attribute_data.extend(self._parse_game_value(
+                                    attribute_info['default'],
+                                    attribute_info['type'],
+                                ) for _ in range(attribute_info['array_length']))
+                    else:
+                        if item_xml is not None:
+                            attribute_data = self._parse_game_value(
+                                item_xml.attrib.get(attribute_name, ''),
+                                attribute_info['type'],
+                            )
+                        else:
+                            attribute_data = self._parse_game_value(
+                                attribute_info['default'],
+                                attribute_info['type'],
+                            )
+                    
+                    item_data[attribute_name] = attribute_data
+
+                item = ShopItem(item_id, category_name, item_data)
                 category[item_id] = item
                         
     def _parse_game_value(self, value: str, type: Literal['string', 'stringWithDefault', 'int', 'float', 'bool']):
