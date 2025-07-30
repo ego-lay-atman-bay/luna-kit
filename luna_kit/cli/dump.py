@@ -169,9 +169,11 @@ class DumpCommand(CLICommand):
             return
 
         try:
-            arks = sort_ark_filenames(files)
+            arks = sort_ark_filenames(arks)
         except:
+            console.print('[red]Could not sort files[/]')
             arks.sort()
+            
 
         extracted_folders = set()
 
