@@ -36,7 +36,7 @@ def strToFloat(value: str, default = 0.0):
         return default
 
 def strToBool(value: str):
-    return str(value).lower() in ['t', 'true', '1', 'y', 'yes']
+    return str(value).lower() in ['1', 't', 'true', '1', 'y', 'yes']
 
 
 def read_ascii_string(file: BinaryIO | bytes, length: int = 64) -> str:
