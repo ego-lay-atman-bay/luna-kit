@@ -163,7 +163,7 @@ class DumpCommand(CLICommand):
 
         base_output = args.output
 
-        arks = args.files
+        arks: list[str] = args.files
         if len(arks) == 0:
             console.print('[red]No ark files found[/]')
             return
@@ -173,7 +173,6 @@ class DumpCommand(CLICommand):
         except:
             console.print('[red]Could not sort files[/]')
             arks.sort()
-            
 
         extracted_folders = set()
 
