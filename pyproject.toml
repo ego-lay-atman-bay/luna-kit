@@ -22,7 +22,7 @@ dynamic = ["version"]
 [project.optional-dependencies]
 ark = [
   "zstandard",
-  "dataclasses-struct==0.8.3",
+  "dataclasses-struct",
   "lxml",
 ]
 
@@ -35,25 +35,25 @@ audio = [
 
 xml = [
   "lxml",
-  "dataclasses-struct==0.8.3",
+  "dataclasses-struct",
 ]
 
 texatlas = [
-  "dataclasses-struct==0.8.3",
+  "dataclasses-struct",
   "Pillow",
   # "astc-encoder-py",
   "texture2ddecoder",
 ]
 
 pvr = [
-  "dataclasses-struct==0.8.3",
+  "dataclasses-struct",
   "Pillow",
   # "astc-encoder-py",
   "texture2ddecoder",
 ]
 
 model = [
-  "dataclasses-struct==0.8.3",
+  "dataclasses-struct",
   "numpy",
   "pygltflib",
   "datauri",
@@ -66,7 +66,7 @@ model = [
 
 # Minimal model dependencies (for rk-blender)
 rk = [
-  "dataclasses-struct==0.8.3",
+  "dataclasses-struct",
   "numpy",
   # "astc-encoder-py",
   "Pillow",
@@ -82,7 +82,7 @@ cli = [
   "rich",
 
   "zstandard",
-  "dataclasses-struct==0.8.3",
+  "dataclasses-struct",
 
   "Pillow",
 
@@ -104,7 +104,7 @@ cli = [
 
 all = [
   "zstandard",
-  "dataclasses-struct==0.8.3",
+  "dataclasses-struct",
 
   "Pillow",
 

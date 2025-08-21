@@ -15,7 +15,7 @@ from .file_utils import PathOrBinaryFile, open_binary
 from .utils import put_alpha, image_has_alpha
 
 
-@dcs.dataclass()
+@dcs.dataclass_struct(size = 'std', byteorder='little')
 class Header:
     magic: Annotated[bytes, 4] = b'PVR\x03'
     flags: dcs.U32 = 0
@@ -31,7 +31,7 @@ class Header:
     mip_map_count: dcs.U32 = 0
     metadata_size: dcs.U32 = 0
 
-@dcs.dataclass()
+@dcs.dataclass_struct(size = 'std', byteorder='little')
 class MetadataHeader:
     fourCC: Annotated[bytes, 4] = b'PVR0'
     key: dcs.U32 = 0

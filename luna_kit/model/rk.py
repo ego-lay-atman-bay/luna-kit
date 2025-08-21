@@ -25,7 +25,7 @@ from .anim import Anim
 from .model_common import USHORT_MAX, Vector3
 
 
-@dcs.dataclass()
+@dcs.dataclass_struct(size = 'std', byteorder='little')
 class Header:
     magic: Annotated[bytes, 8] = b'RKFORMAT'
     unknown1: dcs.U32 = 0

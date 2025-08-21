@@ -21,7 +21,7 @@ from .model_common import Vector3
 from .mathutils import Quaternion
 
 
-@dcs.dataclass()
+@dcs.dataclass_struct(size = 'std', byteorder='little')
 class Header:
     magic: Annotated[bytes, 8] = b'RKFORMAT'
     version_major: dcs.U32 = 5

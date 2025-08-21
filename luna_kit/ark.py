@@ -30,13 +30,13 @@ from .utils import posix_path, read_ascii_string, trailing_slash
 def metadata_by_file_location(metadata: 'FileMetadata'):
     return metadata.file_location
 
-@dcs.dataclass()
+@dcs.dataclass_struct(size = 'std', byteorder='little')
 class _v1Header():
     file_count: dcs.U32 = 0
     metadata_offset: dcs.U32 = 0
     version: dcs.U32 = 0
 
-@dcs.dataclass()
+@dcs.dataclass_struct(size = 'std', byteorder='little')
 class _v3v4Header():
     file_count: dcs.U32 = 0
     metadata_offset: dcs.U32 = 0
@@ -87,7 +87,7 @@ _HEADER_STRUCTS = {
 HEADER_FORMAT = "3I"
 
 
-@dcs.dataclass()
+@dcs.dataclass_struct(size = 'std', byteorder='little')
 class _v1v3FileMetadataStruct:
     filename: Annotated[bytes, 128]
     pathname: Annotated[bytes, 128]
@@ -99,7 +99,7 @@ class _v1v3FileMetadataStruct:
     md5sum: Annotated[bytes, 16]
     priority: dcs.U32
 
-@dcs.dataclass()
+@dcs.dataclass_struct(size = 'std', byteorder='little')
 class _v4FileMetadataStruct:
     filename: Annotated[bytes, 128]
     pathname: Annotated[bytes, 128]
