@@ -105,7 +105,8 @@ class LOC(UserDict):
         return value.decode('utf-16')
 
     def translate(self, key: str):
-        return self.data.get(key, key)
+        data = {key.strip(): value for key, value in self.data.items()}
+        return data.get(key.strip(), key)
     
     @property
     def language(self):
