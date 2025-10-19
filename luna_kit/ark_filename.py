@@ -13,9 +13,9 @@ class ARKFilename:
     calibre: str = ''
 
     dlc: bool = False
-    dlc_tag: str = ''
+    dlc_tags: list[str]
     
-    def __init__(self, filename: str | None = None):
+    def __init__(self, filename: 'str | None | ARKFilename' = None):
         if filename is not None:
             if isinstance(filename, self.__class__):
                 self.priority = filename.priority
@@ -24,7 +24,7 @@ class ARKFilename:
                 self.format = filename.format
                 self.calibre = filename.calibre
                 self.dlc = filename.dlc
-                self.dlc_tag = filename.dlc_tag
+                self.dlc_tags = filename.dlc_tags.copy()
             elif isinstance(filename, str):
                 self.parse_filename(filename)
             else:
@@ -50,14 +50,14 @@ class ARKFilename:
     
     def parse_filename(self, filename: str):
         # reset
-        self.priority: int = 0
-        self.tag: str = ''
-        self.encoding: str = ''
-        self.format: str = ''
-        self.calibre: str = ''
+        self.priority = 0
+        self.tag = ''
+        self.encoding = ''
+        self.format = ''
+        self.calibre = ''
 
-        self.dlc: bool = False
-        self.dlc_tag: str = ''
+        self.dlc = False
+        self.dlc_tags = []
 
         filename = os.path.splitext(filename)[0]
         parts = iter(filename.split('_'))
@@ -70,7 +70,7 @@ class ARKFilename:
             if tag == 'softdlc':
                 self.dlc = True
                 tag = next(parts)
-                self.dlc_tag = next(parts)
+                self.dlc_tags.append(next(parts))
             
             self.tag = tag
             
@@ -82,6 +82,8 @@ class ARKFilename:
                     self.format = part
                 elif part in self.ENCODINGS:
                     self.encoding = part
+                elif self.dlc and part:
+                    self.dlc_tags.append(part)
                 else:
                     raise ValueError(f'Unknown part {part}')
             
@@ -96,7 +98,7 @@ class ARKFilename:
                 self.format == value.format and
                 self.calibre == value.calibre and
                 self.dlc == value.dlc and
-                self.dlc_tag == value.dlc_tag)
+                self.dlc_tags == value.dlc_tags)
     
     CALIBRE_PRIORITY = [
         'all',
@@ -135,7 +137,7 @@ class ARKFilename:
             return tag[0] > tag[1]
         
         if self.dlc and value.dlc:
-            dlc_tag = [self.dlc_tag, value.dlc_tag]
+            dlc_tag = [self.dlc_tags, value.dlc_tags]
             if dlc_tag[0] != dlc_tag[1]:
                 return dlc_tag[0] > dlc_tag[1]
         
@@ -172,7 +174,7 @@ class ARKFilename:
             return tag[0] < tag[1]
         
         if self.dlc and value.dlc:
-            dlc_tag = [self.dlc_tag, value.dlc_tag]
+            dlc_tag = [self.dlc_tags, value.dlc_tags]
             if dlc_tag[0] != dlc_tag[1]:
                 return dlc_tag[0] < dlc_tag[1]
         
@@ -205,8 +207,8 @@ class ARKFilename:
         if self.tag:
             name.append(self.tag)
         
-        if self.dlc_tag:
-            name.append(self.dlc_tag)
+        if self.dlc_tags:
+            name.append(self.dlc_tags)
         
         if self.encoding:
             name.append(self.encoding)
@@ -220,7 +222,7 @@ class ARKFilename:
         return '_'.join(name)
     
     def __repr__(self):
-        return f'{self.__class__.__name__}(priority={repr(self.priority)} tag={repr(self.tag)} encoding={repr(self.encoding)} format={repr(self.format)} calibre={repr(self.calibre)} dlc={repr(self.dlc)} dlc_tag={repr(self.dlc_tag)})'
+        return f'{self.__class__.__name__}(priority={repr(self.priority)} tag={repr(self.tag)} encoding={repr(self.encoding)} format={repr(self.format)} calibre={repr(self.calibre)} dlc={repr(self.dlc)} dlc_tag={repr(self.dlc_tags)})'
 
 def sort_ark_filenames(filenames: list[str]) -> list[str]:
     return sorted(filenames, key = lambda file: ARKFilename(file))
