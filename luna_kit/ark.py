@@ -123,7 +123,7 @@ class FileMetadata:
     encrypted_size: int
     timestamp: int
     md5sum: bytes
-    unknown1: bytes
+    unknown1: int
     unknown2: bytes
     priority: int
     
@@ -198,8 +198,8 @@ class FileMetadata:
                     timestamp = int(self.timestamp),
                     md5sum = self.md5sum,
                     priority = self.priority,
-                    unknown1 = self.unknown1,
-                    unknown2 = self.unknown2,
+                    unknown1 = self.unknown1 or 0,
+                    unknown2 = self.unknown2 or b'',
                 )
             case _:
                 raise ValueError(f'Invalid ark version: {self.version}')
@@ -507,6 +507,8 @@ class ARK():
             compressed = compressed,
             priority = metadata.priority,
             date = metadata.date,
+            unknown1 = metadata.unknown1,
+            unknown2 = metadata.unknown2,
         )
     
     def _write_file(self, data: bytes, metadata: FileMetadata, file: BinaryIO):
@@ -605,6 +607,8 @@ class ARKFile():
         encrypted: bool = False,
         priority: int = 0,
         date: datetime | None = None,
+        unknown1: int = 0,
+        unknown2: bytes = b'',
     ) -> None:
         """File inside `.ark` file.
 
@@ -624,6 +628,9 @@ class ARKFile():
         if date is None:
             date = datetime.now()
         self.timestamp = date
+
+        self.unknown1: int = unknown1
+        self.unknown2: bytes = unknown2
     
     @property
     def filename(self) -> str:
@@ -694,11 +701,11 @@ class ARKFile():
             original_filesize = len(result),
             compressed_size = 0,
             encrypted_size = 0,
-            timestamp = self.timestamp.timestamp(),
+            timestamp = int(self.timestamp.timestamp()),
             md5sum = bytes.fromhex(hashlib.md5(result).hexdigest()),
             priority = self.priority,
-            unknown1 = None,
-            unknown2 = None,
+            unknown1 = self.unknown1,
+            unknown2 = self.unknown2,
         )
         if self.compressed:
             result = zstandard.compress(result, 9)
