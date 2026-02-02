@@ -150,6 +150,7 @@ class DownloadCommand(CLICommand):
                             filename,
                             file = os.path.join(output, filename),
                             stream = True,
+                            asset_hash = file.get('asset_hash'),
                         ) as downloader:
                             downloader.response.raise_for_status()
                             downloader.full_download(True)
