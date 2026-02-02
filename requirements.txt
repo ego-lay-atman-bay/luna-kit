@@ -16,6 +16,7 @@ texture2ddecoder==1.0.5
 scipy==1.15.2
 
 requests==2.32.3
+xxhash==3.6.0
 furl==2.1.4
 
 # for __blender_hook.py

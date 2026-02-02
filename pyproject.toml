@@ -76,6 +76,7 @@ rk = [
 download = [
   "requests",
   "furl",
+  "xxhash",
 ]
 
 cli = [
