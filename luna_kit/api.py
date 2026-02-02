@@ -120,7 +120,10 @@ class Downloader:
     
     def __enter__(self):
         self.matches_hash = False
-        self._open_file = open_binary(self._file, 'r+')
+        if isinstance(self._file, str) and not os.path.exists(self._file):
+            self._open_file = open_binary(self._file, 'w')
+        else:
+            self._open_file = open_binary(self._file, 'r+')
         self.file = self._open_file.__enter__()
         
         
