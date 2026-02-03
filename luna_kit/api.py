@@ -7,8 +7,8 @@ from typing import BinaryIO, Callable, Generator, Literal, TypedDict, overload
 import urllib
 import urllib.parse
 
-
 from .file_utils import PathOrBinaryFile, open_binary
+from .utils import strToInt
 
 try:
     import xxhash
@@ -116,18 +116,20 @@ class Downloader:
         self._file = file
         self._open_file = None
         self.file: BinaryIO | None = None
-        self._iter: Generator | None = None
+        self._iter: Generator[bytes] | None = None
     
     def __enter__(self):
         self.matches_hash = False
+        self.response.raise_for_status()
         if isinstance(self._file, str) and not os.path.exists(self._file):
-            self._open_file = open_binary(self._file, 'w')
+            self._open_file = None
+            self.file = None
         else:
             self._open_file = open_binary(self._file, 'r+')
-        self.file = self._open_file.__enter__()
+            self.file = self._open_file.__enter__()
         
         
-        if self.file.readable():
+        if self.file and self.file.readable():
             self.file.seek(0)
             if self.asset_hash:
                 existing_hash = xxh32_file(self.file).upper()
@@ -150,7 +152,7 @@ class Downloader:
                     if current_hash.hexdigest() == hash:
                         self.matches_hash = True
         
-        if not self.matches_hash:
+        if self.file and not self.matches_hash:
             self.file.seek(0)
             self.file.truncate()
 
@@ -161,24 +163,28 @@ class Downloader:
             self._open_file.__exit__(type, value, traceback)
     
     def __len__(self):
-        return int(self.response.headers.get('content-length', 0))
+        return strToInt(self.response.headers.get('content-length', '0'))
     
     def __iter__(self):
-        if self.file is not None:
-            self._iter = self.response.iter_content(chunk_size = self.chunk_size)
+        self._iter = self.response.iter_content(chunk_size = self.chunk_size)
         return self
     
     def __next__(self):
-        if self._iter is None or self.file is None:
+        if self._iter is None:
             raise StopIteration
         
-        chunk = self._iter.__next__()
-        self.file.write(chunk)
+        chunk = next(self._iter)
+        if self.file is None and isinstance(self._file, str) and not os.path.exists(self._file):
+            os.makedirs(os.path.dirname(os.path.abspath(self._file)), exist_ok = True)
+            self._open_file = open_binary(self._file, 'w')
+            self.file = self._open_file.__enter__()
+        
+        if self.file is not None:
+            self.file.write(chunk)
+
         return chunk
     
     def full_download(self, progress_bar = False) -> bytes | None:
-        if self.file is None:
-            return
         if self.matches_hash:
             if progress_bar:
                 from .console import console

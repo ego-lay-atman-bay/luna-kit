@@ -139,10 +139,10 @@ class DownloadCommand(CLICommand):
                 
                 console.print(f'downloading [yellow]{filename}[/]')
 
-                os.makedirs(
-                    os.path.dirname(os.path.join(output, filename)),
-                    exist_ok = True,
-                )
+                # os.makedirs(
+                #     os.path.dirname(os.path.join(output, filename)),
+                #     exist_ok = True,
+                # )
                 
                 if not args.dry_run:
                     try:
@@ -187,6 +187,10 @@ class DownloadCommand(CLICommand):
             console.print(f'downloading [yellow]{file}[/]')
             if not args.dry_run:
                 try:
+                    # os.makedirs(
+                    #     os.path.dirname(os.path.join(output, file)),
+                    #     exist_ok = True,
+                    # )
                     with api.download_asset(
                         file,
                         file = os.path.join(output, file),
