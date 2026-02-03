@@ -101,6 +101,7 @@ cli = [
   
   "requests",
   "furl",
+  "xxhash",
 ]
 
 all = [
@@ -122,6 +123,10 @@ all = [
   "pygltflib",
   "datauri",
   "scipy",
+  
+  "requests",
+  "furl",
+  "xxhash",
 ]
 
 [project.urls]
