@@ -690,7 +690,8 @@ class ARKFile():
         if self.timestamp > datetime.now():
             logging.debug(f'{self.fullpath} date {self.timestamp} is after today {datetime.now()}')
         
-        # os.utime(path, (self.date.timestamp(),))
+        timestamp = int(self.timestamp.timestamp())
+        os.utime(path, (timestamp,timestamp))
     
     def pack(self) -> tuple[bytes, FileMetadata]:
         result = self.data
