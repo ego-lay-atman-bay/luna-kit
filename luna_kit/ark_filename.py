@@ -84,6 +84,8 @@ class ARKFilename:
                     self.encoding = part
                 elif self.dlc and part:
                     self.dlc_tags.append(part)
+                elif not self.dlc and part == 'soft':
+                    self.dlc = True
                 else:
                     raise ValueError(f'Unknown part {part}')
             
