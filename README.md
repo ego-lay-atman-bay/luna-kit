@@ -2,7 +2,32 @@
 This is a toolkit that is used for reading files from the My Little Pony Magic Princess Gameloft game.
 
 # Installation
-You can install Luna Kit by first making sure [python](https://python.org) (version 3.11 and later), and [git](https://git-scm.com/) is installed, then run
+
+## uv
+
+The easiest way to install and update luna kit, is by using [uv](https://docs.astral.sh/uv/). After you have uv installed, run this command to install Luna Kit.
+
+```shell
+uv tool install 'git+https://github.com/ego-lay-atman-bay/luna-kit[cli]'
+```
+
+And then you can use `luna-kit` globally.
+
+To update, just run
+
+```shell
+uv tool upgrade 'luna-kit[cli]'
+```
+
+To uninstall, just run
+
+```shell
+uv tool uninstall luna-kit
+```
+
+## pip
+
+If you need to install it through pip, just run this command.
 
 ```shell
 pip install luna-kit[cli]@git+https://github.com/ego-lay-atman-bay/luna-kit
@@ -12,6 +37,12 @@ To update, run this command.
 
 ```shell
 pip install --upgrade luna-kit[cli]@git+https://github.com/ego-lay-atman-bay/luna-kit --force
+```
+
+And uninstalling
+
+```shell
+pip uninstall lun-kit
 ```
 
 # Usage
@@ -77,9 +108,11 @@ luna-kit dump "ark files/*.ark" -o "extracted/{name}"
 
 If you omit the `-o/--output` argument, it will default to extracting each ark file into a folder with the same name in the same folder.
 
+The `dump` command will do everything below automatically, so you don't need to bother with them.
+
 ## Extracting `.ark` files
 
-Extract `.ark` files with this command
+If you want to just extract ark files without doing anything extra (like formatting or converting files), then you can use the `ark` command
 
 ```shell
 luna-kit ark "path/to/ark.ark" -o "output/folder"
@@ -137,7 +170,9 @@ If you are writing a script that uses luna-kit, it is important to know all the 
 - `[rk]`: Barebones requirements for reading `.rk` and `.anim` files
 - `[download]`: Everything needed to downloaded ark files
 - `[cli]`: Everything needed to run the cli
-- `[all]`: Includes Everything but the cli specific stuff (`rich`)
+- `[all]`: Includes Everything except cli specific stuff (`rich`)
+
+The main reason the dependencies are split up like this, is to reduce bundle size if you are just using one thing. For example, if you're just writing a script to read `.rk` files, you don't need any networking stuff that's needed for `download`. You especially don't need the massive `rich` library if you're not using the cli.
 
 # Converting audio
 
