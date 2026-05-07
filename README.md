@@ -1,4 +1,6 @@
 # Luna Kit
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/C0C61YMJCH)
+
 This is a toolkit that is used for reading files from the My Little Pony Magic Princess Gameloft game.
 
 # Installation
@@ -142,7 +144,7 @@ luna-kit ark extract "files/*.ark" "other.ark" -o "extracted"
 ## Create and add to ark files
 
 > [!NOTE]
-> While luna kit does have the ability to create and modify ark files, I will not be showing you how to load them in the game, you'll have to figure it out yourself.)
+> While luna kit does have the ability to create and modify ark files, I will not be showing you how to load them in the game, you'll have to figure it out yourself.
 
 You can also create and add to ark files. Both the `create` and `add` subcommands work practically the same, the only difference is that `create` completely overrides the output file if it already exists, while `add` just adds to it.
 
