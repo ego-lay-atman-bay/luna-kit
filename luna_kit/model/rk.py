@@ -527,20 +527,20 @@ class RKM:
             elif field.type is bool:
                 setattr(self, attr, strToBool(getattr(self, attr)))
     
-    @property
-    def texture_name(self):
-        if self.NoCompress:
-            return self.DiffuseTexture + '.png'
-        else:
-            return self.DiffuseTexture + '.pvr'
+    def texture_name(self, suffix: str = ''):
+        extension = 'png' if self.NoCompress else 'pvr'
+
+        if os.path.isfile(os.path.join(self.dir, (name := f'{self.DiffuseTexture}{suffix}.{extension}'))):
+            return name
+        
+        return f'{self.DiffuseTexture}.{extension}'
     
     @property
     def dir(self):
         return os.path.dirname(self.filename)
     
-    @property
-    def image(self):
-        filename = os.path.join(self.dir, self.texture_name)
+    def image(self, suffix: str = ''):
+        filename = os.path.join(self.dir, self.texture_name(suffix))
         if not os.path.exists(filename):
             return None
         
