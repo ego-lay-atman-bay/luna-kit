@@ -1,7 +1,9 @@
+from _collections_abc import dict_items, dict_keys, dict_values
 from collections import UserDict
 from dataclasses import dataclass
 import dataclasses
 import os
+from typing import Any, overload
 
 from lxml import etree
 
@@ -268,3 +270,45 @@ class QuestTable(UserDict):
     @quests.setter
     def quests(self, data: dict):
         self.data = data
+
+@dataclass
+class QuestCategory:
+    name: str
+    loc_name: str
+    default_giver: str
+    active_limit: int
+    time_limited: bool
+    image: str
+    final_text: str
+    final_image: str
+    building: str
+    outro_cinematic: str
+    reward_icon: str
+    tracking_id: int
+    teaser_movie: str
+
+class QuestManager(UserDict):
+    data: dict[str, QuestCategory]
+    
+    def __init__(self, filename: PathOrBinaryFile):
+        quest_manager_xml = parse_xml(filename)[0]
+
+    def keys(self) -> dict_keys[str, QuestCategory]:
+        return self.data.keys()
+    
+    def values(self) -> dict_values[str, QuestCategory]:
+        return self.data.values()
+    
+    def items(self) -> dict_items[str, QuestCategory]:
+        return self.data.items()
+    
+    def __getitem__(self, key: str) -> QuestCategory:
+        return self.data.__getitem__(key)
+    
+    @overload
+    def get[T](self, key: str) -> QuestCategory | None: ...
+    @overload
+    def get[T](self, key: str, default: T | None = None) -> QuestCategory | T | None: ...
+    def get[T](self, key: str, default: T | None = None) -> QuestCategory | T | None:
+        return self.data.get(key, default)
+    
