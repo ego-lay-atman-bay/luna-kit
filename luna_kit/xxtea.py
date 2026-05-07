@@ -3,6 +3,7 @@ import struct
 from ctypes import *
 from ctypes import c_uint32
 from typing import Annotated
+import xxtea
 
 
 def get_phdr_size(phdr_off: int):
@@ -13,7 +14,19 @@ def get_phdr_size(phdr_off: int):
     return phdr_off
 
 
-def decrypt(src: bytes | bytearray, key: Annotated[list[int], 4]):
+def decrypt(src: bytes | bytearray, key: Annotated[bytes, 16]) -> bytes:
+    return xxtea.decrypt(src, key, padding = False)
+
+def encrypt(src: bytes | bytearray, key: Annotated[bytes, 16]) -> bytes:
+    n = get_phdr_size(len(src)) // 4
+
+    if n != len(src) // 4:
+        src += b'\x00' * (4 - (len(src) % 4))
+    
+    return xxtea.encrypt(src, key, padding = False)
+
+
+def decrypt_python(src: bytes | bytearray, key: Annotated[list[int], 4]):
     n = get_phdr_size(len(src)) // 4
     
     v = [c_uint(x) for x in struct.unpack(
@@ -53,7 +66,7 @@ def decrypt(src: bytes | bytearray, key: Annotated[list[int], 4]):
 
     return b''.join([bytes(x) for x in v])
 
-def encrypt(src: bytes | bytearray, key: Annotated[list[int], 4]):
+def encrypt_python(src: bytes | bytearray, key: Annotated[list[int], 4]):
     n = get_phdr_size(len(src)) // 4
 
     if n != len(src) // 4:
