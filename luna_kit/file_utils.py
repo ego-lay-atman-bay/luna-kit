@@ -1,4 +1,4 @@
-from typing import IO, BinaryIO, TextIO, TypeAlias
+from typing import IO, BinaryIO, TextIO, TypeAlias, Any, overload, Literal
 import io
 from contextlib import nullcontext
 
@@ -22,7 +22,7 @@ def peek(file: IO, n: int):
 def is_text_file(file: IO):
     return isinstance(file, io.TextIOBase)
 
-def is_binary_file(file: IO):
+def is_binary_file(file: IO) -> bool:
     return isinstance(file, (io.RawIOBase, io.BufferedIOBase))
 
 def is_file_like(file: IO):
@@ -42,7 +42,7 @@ PathOrFile: TypeAlias = PathOrBinaryFile | PathOrTextFile
 class BinaryReader():
     pass
 
-def open_binary(file: PathOrBinaryFile, mode = 'r') -> BinaryIO:
+def open_binary(file: PathOrBinaryFile, mode = 'r') -> nullcontext | BinaryIO:
     """Open binary file
 
     Args:
@@ -66,7 +66,7 @@ def open_binary(file: PathOrBinaryFile, mode = 'r') -> BinaryIO:
     elif isinstance(file, (bytes, bytearray)):
         context_manager = io.BytesIO(file)
     elif is_binary_file(file):
-        context_manager = nullcontext(file)
+        context_manager = nullcontext[BinaryIO](file)
     elif is_text_file(file):
         raise TypeError('file must be open in binary mode')
     else:
