@@ -171,11 +171,16 @@ model/
 *.flac
 *.dat
 *.pvr
+uv.lock
+
+test_arks/
+ark_data/
+resources/
 
 # only include the project files (hopefully this will keep me from accidentally pushing the wrong files)
-**/*
-!LICENSE
-!README.md
-!luna_kit/**
-!pyproject.toml
-!requirements.txt
+# **/*
+# !LICENSE
+# !README.md
+# !luna_kit/**
+# !pyproject.toml
+# !requirements.txt
