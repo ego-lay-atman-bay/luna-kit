@@ -195,7 +195,8 @@ class Downloader:
         content = b''
         
         if progress_bar:
-            from rich.progress import Progress, Column, TextColumn, BarColumn, DownloadColumn, TimeRemainingColumn
+            from rich.progress import Progress, TextColumn, BarColumn, DownloadColumn, TimeRemainingColumn
+            from rich.table import Column
             from .console import console
             
             with Progress(
@@ -433,6 +434,8 @@ class API:
         client_id: ClientID | str | Literal['android', 'ios'],
         version: str | None = None,
         country: str = 'US',
+        *,
+        chunk_size: int | None = None,
     ) -> None:
         if client_id in ['android', 'ios']:
             if client_id == 'android':
@@ -449,6 +452,8 @@ class API:
             client_id,
             country = country,
         )
+
+        self.chunk_size: int | None = chunk_size
     
     @property
     def client_id(self):
