@@ -45,6 +45,10 @@ And uninstalling
 pip uninstall lun-kit
 ```
 
+## Tab Autocompletion (optional)
+
+If you would like tab autocompletion, this program uses [argcomplete](https://kislyuk.github.io/argcomplete/), so all you need to do is set that up (you can ignore the python code stuff).
+
 # Usage
 
 You can use Luna Kit by running
@@ -110,25 +114,49 @@ If you omit the `-o/--output` argument, it will default to extracting each ark f
 
 The `dump` command will do everything below automatically, so you don't need to bother with them.
 
-## Extracting `.ark` files
+## The `ark` command
 
-If you want to just extract ark files without doing anything extra (like formatting or converting files), then you can use the `ark` command
+The `ark` command has several subcommands to help with different operations on ark files.
 
-```shell
-luna-kit ark "path/to/ark.ark" -o "output/folder"
-```
+## List files
 
-This also accepts multiple `.ark` files.
+You can list all the files in an ark file with the `list` subcommand.
 
 ```shell
-luna-kit ark "path/to/ark.ark" "another_ark.ark" -o "output"
+luna-kit list test.ark
+```
+```
+test.ark
+file.json 2026-05-06 00:02:58
+...
 ```
 
-The filename can also be a glob pattern (selects all the `.ark` files in a folder).
+### Extracting
+
+You can extract ark files easily with the `extract` subcommand. Note, unlike `dump`, this does not modify the files in any way (so many files may not be human readable).
 
 ```shell
-luna-kit ark "path/to/*.ark" -o "output"
+luna-kit ark extract "files/*.ark" "other.ark" -o "extracted"
 ```
+
+## Create and add to ark files
+
+> [!NOTE]
+> While luna kit does have the ability to create and modify ark files, I will not be showing you how to load them in the game, you'll have to figure it out yourself.)
+
+You can also create and add to ark files. Both the `create` and `add` subcommands work practically the same, the only difference is that `create` completely overrides the output file if it already exists, while `add` just adds to it.
+
+```shell
+luna-kit ark create input.txt other.txt=folder/other.txt folder/ -o test.ark
+```
+
+You can add both single files or entire folders. Right now there is no system to automatically reverse what the `dump` command outputs.
+
+When you put a direct path to a filename, it only uses the base name (for example, `test.txt` from `folder/test.txt`). However, you can optionally specify the filename you want to be used in the ark file with `=filename.txt`.
+
+When you specify a folder, it adds all files in the folder recursively. All the filenames used will relative to the input folder, so subfolders keep their structure. You can also add `=folder` to put all the files in a specific folder in the ark file instead of the root directory.
+
+When the game loads ark files, it uses the file that has the latest timestamp whenever there are duplicates across multiple ark files. Due to this, luna kit automatically uses the current date when adding files to ark files. If you wish to use the modified date on your device instead, you can add the `-t/--use-system-timestamps` flag to the command.
 
 ## Split `.texatlas` files
 
@@ -158,11 +186,11 @@ luna-kit loc "english.loc" --format csv
 
 ## Development
 
-If you are writing a script that uses luna-kit, it is important to know all the optional dependencies (the text in brackets at the end of the installation requirement, like `luna-kit[cli]`). Multiple can also be specified `luna-kit[ark,xml,pvr,rk]`.
+If you are writing a script that uses luna kit, it is important to know all the optional dependencies (the text in brackets at the end of the installation requirement, like `luna-kit[cli]`). Multiple can also be specified `luna-kit[ark,xml,pvr,rk]`.
 
 - `[ark]`: Required for reading `.ark` files
 - `[loc]`: Required for reading `.loc` files (ok, there's no dependencies for this)
-- `[audio]`: Required for reading audio files (just installed `vxn-py` and `filetype`)
+- `[audio]`: Required for reading audio files (just installs `vxn-py` and `filetype`)
 - `[xml]`: Required for reading xml files
 - `[texatlas]`: Required for reading `.texatlas` files
 - `[pvr]`: Required for reading `.pvr` files
