@@ -1,94 +1,157 @@
+from collections.abc import Buffer, Iterable
+from contextlib import nullcontext
+from dataclasses import dataclass, field
+from datetime import datetime
 import hashlib
 import io
-import logging
 import os
+import pathlib
+import shutil
 import struct
 import sys
-import warnings
+import tempfile
+import time
+from typing import (
+    Annotated,
+    BinaryIO,
+    ClassVar,
+    Iterator,
+    Literal,
+    Self,
+    TYPE_CHECKING,
+    Type,
+    TypeVar,
+)
 import zlib
-from collections.abc import Callable, Iterable, Iterator
-from copy import deepcopy
-from ctypes import *
-from dataclasses import dataclass
-from datetime import datetime
-from typing import IO, Annotated, Any, BinaryIO, Type
+
+from .file_utils import PathOrBinaryFile, open_binary
+from .utils import posix_path, read_ascii_string
 
 try:
     import dataclasses_struct as dcs
     import zstandard
-    from lxml import etree
+    from . import xxtea
 except ImportError as e:
     e.add_note('ark dependencies could not be found')
     raise e
 
-from . import enums, types, xxtea
-from .file_utils import (PathOrBinaryFile, get_filesize, is_binary_file,
-                         is_text_file, open_binary)
-from .utils import posix_path, read_ascii_string, trailing_slash
+class BadARKFile(Exception):
+    pass
 
+class DataclassStructProtocol:
+    """Stub for dataclass struct typechecking"""
 
-def metadata_by_file_location(metadata: 'FileMetadata'):
-    return metadata.file_location
+    if TYPE_CHECKING:
+
+        __dataclass_struct__: ClassVar[dcs.DataclassStructInternal]
+
+        def pack(self) -> bytes: ...
+
+        @classmethod
+        def from_packed(cls, data: Buffer) -> Self: ...
+
 
 @dcs.dataclass_struct(size = 'std', byteorder='little')
-class _v1Header():
+class _v1Header(DataclassStructProtocol):
     file_count: dcs.U32 = 0
     metadata_offset: dcs.U32 = 0
     version: dcs.U32 = 0
 
 @dcs.dataclass_struct(size = 'std', byteorder='little')
-class _v3v4Header():
+class _v3v4Header(DataclassStructProtocol):
     file_count: dcs.U32 = 0
     metadata_offset: dcs.U32 = 0
     version: dcs.U32 = 0
     metadata_length: dcs.U32 = 0
     unknown: Annotated[bytes, 16] = b'\x00' * 16
 
-@dataclass
-class Header:
-    version: int = 4
-    file_count: int = 0
-    metadata_offset: int = 0
-    metadata_length: int = 0
-    unknown: bytes = b''
-    
-    @property
-    def struct_size(self):
-        return dcs.get_struct_size(_HEADER_STRUCTS[self.version])
-    
-    def pack(self):
-        match self.version:
-            case 1:
-                data = _v1Header(
-                    file_count = self.file_count,
-                    metadata_offset = self.metadata_offset,
-                    version = self.version
-                )
-            case 3 | 4:
-                data = _v3v4Header(
-                    file_count = self.file_count,
-                    metadata_offset = self.metadata_offset,
-                    version = self.version,
-                    metadata_length = self.metadata_length,
-                    unknown = self.unknown,
-                )
-            case _:
-                raise ValueError(f'Invalid ark version: {self.version}')
-        
-        return data.pack()
-    
-_HEADER_STRUCTS = {
+_HEADER_STRUCTS: dict[int, Type[_v1Header | _v3v4Header]] = {
     1: _v1Header,
     3: _v3v4Header,
     4: _v3v4Header,
 }
 
+@dataclass
+class ARKHeader:
+    file_count: int = 0
+    version: int = 4
+    metadata_offset: int = -1
+    metadata_length: int = -1
+    unknown: bytes = b''
 
-HEADER_FORMAT = "3I"
+    @property
+    def packed_size(self):
+        if self.version not in _HEADER_STRUCTS:
+            raise BadARKFile(f'Unknown file version {self.version}')
+        
+        return _HEADER_STRUCTS[self.version].__dataclass_struct__.size
+
+    def pack(self):
+        version_struct = _HEADER_STRUCTS.get(self.version)
+        if not version_struct:
+            raise BadARKFile(f'Unknown file version {self.version}')
+        if issubclass(version_struct, _v1Header):
+            return version_struct(
+                file_count = self.file_count,
+                metadata_offset = self.metadata_offset,
+                version = self.version,
+            ).pack()
+        elif issubclass(version_struct, _v3v4Header):
+            return version_struct(
+                file_count = self.file_count,
+                metadata_offset = self.metadata_offset,
+                version = self.version,
+                metadata_length = self.metadata_length,
+                unknown = self.unknown,
+            ).pack()
+        else:
+            raise BadARKFile(f'Unknown file version {self.version}')
+
+    @classmethod
+    def unpack(cls, file: BinaryIO):
+        file.seek(8)
+        version = struct.unpack('<I', file.read(4))[0]
+        file.seek(-1, os.SEEK_END)
+        filesize = file.tell()
+        file.seek(0)
+
+        if version not in _HEADER_STRUCTS:
+            raise BadARKFile(f'Unknown file version {version}')
+        
+        header: _v1Header | _v3v4Header
+
+        if version == 1:
+            header = _v1Header.from_packed(
+                file.read(_v1Header.__dataclass_struct__.size)
+            )
+        elif version == 3 or version == 4:
+            header = _v3v4Header.from_packed(
+                file.read(_v3v4Header.__dataclass_struct__.size)
+            )
+        else:
+            raise BadARKFile(f"Unknown file version: {version}")
+        
+        return cls(
+            file_count = header.file_count,
+            version = header.version,
+            metadata_offset = header.metadata_offset,
+            metadata_length = header.metadata_length if isinstance(header, _v3v4Header) else filesize - header.metadata_offset,
+            unknown = header.unknown if isinstance(header, _v3v4Header) else b'',
+        )
+    
+    def copy(self):
+        return ARKHeader(
+            self.file_count,
+            self.version,
+            self.metadata_offset,
+            self.metadata_length,
+            self.unknown,
+        )
+
 
 
 @dcs.dataclass_struct(size = 'std', byteorder='little')
-class _v1v3FileMetadataStruct:
+class _v1v3MetadataStruct(DataclassStructProtocol):
     filename: Annotated[bytes, 128]
     pathname: Annotated[bytes, 128]
     file_location: dcs.U32
@@ -100,7 +163,7 @@ class _v1v3FileMetadataStruct:
     priority: dcs.U32
 
 @dcs.dataclass_struct(size = 'std', byteorder='little')
-class _v4FileMetadataStruct:
+class _v4MetadataStruct(DataclassStructProtocol):
     filename: Annotated[bytes, 128]
     pathname: Annotated[bytes, 128]
     file_location: dcs.U32
@@ -113,674 +176,1021 @@ class _v4FileMetadataStruct:
     md5sum: Annotated[bytes, 16]
     priority: dcs.U32
 
-@dataclass
-class FileMetadata:
-    filename: str
-    pathname: str
-    file_location: int
-    original_filesize: int
-    compressed_size: int
-    encrypted_size: int
-    timestamp: int
-    md5sum: bytes
-    unknown1: int
-    unknown2: bytes
-    priority: int
-    
-    version: int = 4
 
-    @property
-    def actual_size(self):
-        return self.encrypted_size or self.compressed_size
-    
-    @property
-    def struct_size(self):
-        return dcs.get_struct_size(_METADATA_STRUCTS[self.version])
-    
-    # def __post_init__(self):
-    #     
-    #     self.__save_original()
-    
-    timestamp_multiplier = 13508
-        
-    @property
-    def date(self):
-        if self.version in [1, 4]:
-            return datetime.fromtimestamp(self.timestamp)
-        elif self.version == 3:
-            return None
-        
-    def __save_original(self):
-        self._filename = self.filename
-        self._pathname = self.pathname
-        self._file_location = self.file_location
-        self._original_filesize = self.original_filesize
-        self._compressed_size = self.compressed_size
-        self._encrypted_nbytes = self.encrypted_size
-        self._timestamp = self.timestamp
-        self._md5sum = self.md5sum
-        self._priority = self.priority
-    
-    @property
-    def full_path(self):
-        return os.path.join(self.pathname, self.filename)
-    
-    @full_path.setter
-    def full_path(self, path: str):
-        self.pathname = posix_path(os.path.dirname(path))
-        self.filename = posix_path(os.path.basename(path))
-    
-    def pack(self, version = None):
-        self.__save_original()
-        if version:
-            self.version = version
-        match self.version:
-            case 1 | 3:
-                data = _v1v3FileMetadataStruct(
-                    filename = self.filename.encode('ascii', errors = 'ignore'),
-                    pathname = self.pathname.encode('ascii', errors = 'ignore'),
-                    file_location = self.file_location,
-                    original_filesize = self.original_filesize,
-                    compressed_size = self.compressed_size,
-                    encrypted_size = self.encrypted_size,
-                    timestamp = int(self.timestamp),
-                    md5sum = self.md5sum,
-                    priority = self.priority,
-                )
-            case 4:
-                data = _v4FileMetadataStruct(
-                    filename = self.filename.encode('ascii', errors = 'ignore'),
-                    pathname = self.pathname.encode('ascii', errors = 'ignore'),
-                    file_location = self.file_location,
-                    original_filesize = self.original_filesize,
-                    compressed_size = self.compressed_size,
-                    encrypted_size = self.encrypted_size,
-                    timestamp = int(self.timestamp),
-                    md5sum = self.md5sum,
-                    priority = self.priority,
-                    unknown1 = self.unknown1 or 0,
-                    unknown2 = self.unknown2 or b'',
-                )
-            case _:
-                raise ValueError(f'Invalid ark version: {self.version}')
-        
-        return data.pack()
-            
-
-_METADATA_STRUCTS: dict[int, Type[_v1v3FileMetadataStruct] | Type[_v4FileMetadataStruct]] = {
-    1: _v1v3FileMetadataStruct,
-    3: _v1v3FileMetadataStruct,
-    4: _v4FileMetadataStruct,
+_METADATA_STRUCTS: dict[int, Type[_v1v3MetadataStruct | _v4MetadataStruct]] = {
+    1: _v1v3MetadataStruct,
+    3: _v1v3MetadataStruct,
+    4: _v4MetadataStruct,
 }
 
 
-FILE_METADATA_FORMAT = "128s128s5I16sI"
+@dataclass
+class ARKMetadata:
+    filename: str
+    pathname: str = ''
+    file_location: int = -1
+    original_filesize: int = 0
+    compressed_size: int = 0
+    encrypted_size: int = 0
+    timestamp: int = 0
+    unknown1: int = 0
+    unknown2: bytes = b''
+    md5sum: bytes = b''
+    priority: int = 0
 
-class ARK():
-    KEY = [0x3d5b2a34, 0x923fff10, 0x00e346a4, 0x0c74902b]
-    
-    header: Header
-    unknown_header_data: bytes
-    _files: 'ARKMetadataCollection[FileMetadata]'
-    
-    _decompresser = zstandard.ZstdDecompressor()
-    
-    __files_block: io.BytesIO
-    
-    def __init__(
-        self,
-        file: str | bytes | bytearray | BinaryIO | None = None,
-    ) -> None:
-        """Extract `.ark` files.
-        
-        If you are going to be passing in a file-like object, there are a few things you need to consider.
-        
-        If you're planning on writing to the file, make sure the file is in read and write mode binary, so `r+b` or `w+b`. This is because I need to read the data in the ark file in order to add to it.
-
-        Args:
-            file (str | bytes | bytearray | BinaryIO | None, optional): Input file. Defaults to None.
-            output (str | None, optional): Optional output folder to extract files to. Defaults to None.
-        """
-        self.__open_file: BinaryIO | None = None
-        self.__close_file: bool = False
-        self._files = ARKMetadataCollection()
-        self.__files_block = io.BytesIO()
-        self.header = Header()
-        
-        self.file = file
-    
     @property
-    def files(self):
-        return deepcopy(self._files)
+    def full_path(self):
+        return pathlib.Path(self.pathname, self.filename).as_posix()
+
+    @classmethod
+    def unpack(cls, file: BinaryIO, version: int):
+        metadata_struct = _METADATA_STRUCTS.get(version, None)
+        if not metadata_struct:
+            raise BadARKFile(f'Unknown file version: {version}')
+        
+        metadata = metadata_struct.from_packed(
+            file.read(metadata_struct.__dataclass_struct__.size)
+        )
+
+        return cls(
+            filename = read_ascii_string(metadata.filename),
+            pathname = read_ascii_string(metadata.pathname),
+            file_location = metadata.file_location,
+            original_filesize = metadata.original_filesize,
+            compressed_size = metadata.compressed_size,
+            encrypted_size = metadata.encrypted_size,
+            timestamp = metadata.timestamp,
+            unknown1 = metadata.unknown1 if isinstance(metadata, _v4MetadataStruct) else 0,
+            unknown2 = metadata.unknown2 if isinstance(metadata, _v4MetadataStruct) else b'',
+            md5sum = metadata.md5sum,
+            priority = metadata.priority,
+        )
     
+    def pack(self, version: int):
+        metadata_struct = _METADATA_STRUCTS.get(version, None)
+        if not metadata_struct:
+            raise BadARKFile(f'Unknown file version: {version}')
+        
+        if issubclass(metadata_struct, _v1v3MetadataStruct):
+            return metadata_struct(
+                filename = self.filename.encode(),
+                pathname = self.pathname.encode(),
+                file_location = self.file_location,
+                original_filesize = self.original_filesize,
+                compressed_size = self.compressed_size,
+                encrypted_size = self.encrypted_size,
+                md5sum = self.md5sum,
+                timestamp = self.timestamp,
+                priority = self.priority,
+            ).pack()
+        elif issubclass(metadata_struct, _v4MetadataStruct):
+            return metadata_struct(
+                filename = self.filename.encode(),
+                pathname = self.pathname.encode(),
+                file_location = self.file_location,
+                original_filesize = self.original_filesize,
+                compressed_size = self.compressed_size,
+                encrypted_size = self.encrypted_size,
+                md5sum = self.md5sum,
+                timestamp = self.timestamp,
+                unknown1 = self.unknown1,
+                unknown2 = self.unknown2,
+                priority = self.priority,
+            ).pack()
+        else:
+            raise BadARKFile(f'Unknown file version: {version}')
+
+    
+    def packed_size(self, version: int):
+        if version not in _METADATA_STRUCTS:
+            raise BadARKFile(f'Unknown file version: {version}')
+        
+        return _METADATA_STRUCTS[version].__dataclass_struct__.size
+    
+    def copy(self):
+        return ARKMetadata(
+            self.filename,
+            self.pathname,
+            self.file_location,
+            self.original_filesize,
+            self.compressed_size,
+            self.encrypted_size,
+            self.timestamp,
+            self.unknown1,
+            self.unknown2,
+            self.md5sum,
+            self.priority,
+        )
+
+@dataclass
+class ARKInfo:
+    _filename: str
+    _timestamp: datetime | None = field(default_factory = datetime.now)
+    _compressed: bool = True
+    _encrypted: bool = False
+    _size: int = 0
+    _md5sum: bytes = b''
+    _priority: int = 0
+    _unknown1: int = 0
+    _unknown2: bytes = b''
+
+    _dirty: bool = False
+
     @property
-    def data_version(self):
-        if 'data_ver.xml' not in self._files:
-            return
-        
-        file = self.read_file(self._files['data_ver.xml'])
-
-        tree = etree.parse(io.BytesIO(file.data))
-        if tree is None:
-            return
-        root = tree.getroot()
-        return root.attrib.get('Value')
-    
-    def __enter__(self):
-        self.load()
-        return self
-    
-    def load(self):
-        self.open()
-        self.read(self.__open_file)
-    
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.close()
-    
-    def open(self):
-        self.close()
-        self.__close_file = True
-        if isinstance(self.file, str):
-            self.__open_file = open(self.file, 'r+b')
-        elif isinstance(self.file, (bytes, bytearray)):
-            self.__open_file = io.BytesIO(self.file)
-        elif is_binary_file(self.file):
-            self.__close_file = False
-            self.__open_file = self.file
-        elif is_text_file(self.file):
-            self.__close_file = False
-            raise TypeError('file must be open in binary mode')
-        else:
-            self.__close_file = False
-            raise TypeError('cannot open file')
-    
-    def close(self):
-        try:
-            logging.debug('closing file')
-        except:
-            # Apparently logging.debug is None when you exit the repl
-            pass
-        if self.__close_file:
-            if not self.__open_file.closed:
-                self.__open_file.close()
-        self.__close_file = False
-    
-    def __del__(self):
-        self.close()
-    
-    def read(self, file: BinaryIO):
-        """Extract `.ark` files.
-
-        Args:
-            file (str | bytes | bytearray | BinaryIO | None, optional): Input file.
-            output (str | None, optional): Optional output folder to extract files to. Defaults to None.
-
-        Raises:
-            TypeError: file must be open in binary mode
-            TypeError: cannot open file
-        """
-        if not is_binary_file(file):
-            raise TypeError('file must be file-like object open in binary read mode')
-        
-        self._files = []
-        
-        file.seek(0)
-        
-        self.header = self._read_header(file)
-        self._files = self._read_metadata(file)
-    
-
-    def write(self, file: BinaryIO):
-        if not is_binary_file(file):
-            raise TypeError('file must be file-like object open in binary write mode')
-        
-        file.seek(0)
-        file.truncate()
-        
-        metadata_block = self._write_metadata(file)
-        self.header.metadata_offset = self.header.struct_size + len(self.__files_block.getvalue())
-        self.header.metadata_length = len(metadata_block)
-        
-        file.write(self._write_header(file))
-        file.write(self.__files_block.getvalue())
-        file.write(metadata_block)
-        self.__files_block.seek(0)
-        self.__files_block.truncate()
-    
-    def _get_file_block(self, file: BinaryIO):
-        self._files.sort(key = metadata_by_file_location)
-        first_file = self._files[0]
-        self.__files_block.seek(0)
-        self.__files_block.truncate()
-        
-        file.seek(first_file.file_location)
-        self.__files_block.write(file.read(self.header.metadata_offset))
-    
-    def extract(self, file: FileMetadata):
-        return self.read_file(file)
-    
-    def read_file(self, file: FileMetadata):
-        return self._get_file_data(file, self.__open_file)
-
-    def add_file(self, file: 'ARKFile'):
-        data, metadata = file.pack()
-        self._write_file(data, metadata, self.__open_file)
-    
-    def _read_header(self, file: IO) -> _v3v4Header:
-        """Read the header of a `.ark` file.
-
-        Args:
-            file (IO): File-like object.
-
-        Returns:
-            dict: Header.
-        """
-        
-        header_start = file.tell()
-        file.seek(8)
-        version = struct.unpack('<I', file.read(4))[0]
-        file.seek(-1, os.SEEK_END)
-        filesize = file.tell()
-        file.seek(0)
-        
-        if version not in _HEADER_STRUCTS:
-            raise ValueError(f'Unknown file version {header.ark_version}')
-        
-        raw_header: _v1Header | _v3v4Header = _HEADER_STRUCTS[version].from_packed(
-            file.read(dcs.get_struct_size(_HEADER_STRUCTS[version]))
-        )
-        
-        header = Header(
-            version = raw_header.version,
-            file_count = raw_header.file_count,
-            metadata_offset = raw_header.metadata_offset,
-            metadata_length = raw_header.metadata_length if hasattr(raw_header, 'metadata_length') else filesize - raw_header.metadata_offset,
-            unknown = raw_header.unknown if hasattr(raw_header, 'unknown') else b'',
-        )
-        
-        return header
+    def filename(self):
+        return self._filename
+    @property
+    def timestamp(self):
+        return self._timestamp
+    @property
+    def compressed(self):
+        return self._compressed
+    @property
+    def encrypted(self):
+        return self._encrypted
+    @property
+    def size(self):
+        return self._size
+    @property
+    def md5sum(self):
+        return self._md5sum.hex()
+    @property
+    def priority(self):
+        return self._priority
+    @property
+    def unknown1(self):
+        return self._unknown1
+    @property
+    def unknown2(self):
+        return self._unknown2
+    @property
+    def dirty(self):
+        return self._dirty
     
     
-    def _write_header(self, file: IO):
-        self.header.file_count = len(self._files)
-        
-        return self.header.pack()
-
-
-    def _read_metadata(self, file: IO) -> None | list[_v1v3FileMetadataStruct]:
-        filesize: int = None
-        
-        file.seek(0, os.SEEK_END)
-        
-        filesize = file.tell()
-        # print(filesize)
-        
-        if filesize < 0:
-            raise TypeError('file size is negative, somehow...')
-        
-        metadata_size = xxtea.get_phdr_size(filesize - self.header.metadata_offset)
-        # print(f'metadata size: {metadata_size}')
-        
-        raw_metadata_size = self.header.file_count * dcs.get_struct_size(_v1v3FileMetadataStruct)
-        # print(f'raw metadata size: {raw_metadata_size}')
-        
-        
-        file.seek(self.header.metadata_offset, os.SEEK_SET)
-        
-        
-        metadata = file.read(metadata_size)
-        
-        # print(f'metadata: {int.from_bytes(metadata, 'little')}')
-        metadata = xxtea.decrypt(metadata, self.KEY)
-
-        self.decrypted_metadata = metadata
-        
-        if self.header.version == 1:
-            raw_metadata = metadata
-        elif self.header.version in [3, 4]:
-            raw_metadata = self._decompresser.decompress(metadata, raw_metadata_size)
-        else:
-            raise ValueError(f'Unknown file version {self.header.version}')
-            
-            
-        self.raw_metadata = raw_metadata
-
-        metadata_struct = _METADATA_STRUCTS[self.header.version]
-
-        metadata_size = dcs.get_struct_size(metadata_struct)
-        result = ARKMetadataCollection()
-        for file_index in range(self.header.file_count):
-            offset = file_index * metadata_size
-            
-            file_result: _v1v3FileMetadataStruct | _v4FileMetadataStruct = metadata_struct.from_packed(
-                raw_metadata[offset : offset + metadata_size]
-            )
-            
-            
-            result.append(FileMetadata(
-                filename = read_ascii_string(file_result.filename),
-                pathname = read_ascii_string(file_result.pathname),
-                file_location = file_result.file_location,
-                original_filesize = file_result.original_filesize,
-                compressed_size = file_result.compressed_size,
-                encrypted_size = file_result.encrypted_size,
-                timestamp = file_result.timestamp,
-                md5sum = bytes.fromhex(file_result.md5sum.hex()) if hasattr(file_result, 'md5sum') else None,
-                unknown1 = file_result.unknown1 if hasattr(file_result, 'unknown1') else None,
-                unknown2 = file_result.unknown2 if hasattr(file_result, 'unknown2') else None,
-                priority = file_result.priority,
-                
-                version = self.header.version,
-            ))
-
+    def __repr__(self) -> str:
+        result = self.__class__.__name__ + '('
+        length = len(self.__dataclass_fields__) - 1
+        for i, fieldname in enumerate(self.__dataclass_fields__):
+            attr = fieldname.removeprefix('_')
+            result += f'{attr}={repr(getattr(self, attr))}'
+            if i == length:
+                result += ', '
+        result += ')'
         return result
 
-    def _get_file_data(self, metadata: FileMetadata, file: BinaryIO):
-        file.seek(metadata.file_location, os.SEEK_SET)
-        
-        file_data = file.read(metadata.encrypted_size if metadata.encrypted_size else metadata.compressed_size)
-        
-        compressed = False
-        encrypted = False
+class ARK:
+    KEY = b'4*[=\x10\xff?\x92\xa4F\xe3\x00+\x90t\x0c'
+    # KEY = [0x3d5b2a34, 0x923fff10, 0x00e346a4, 0x0c74902b]
+    _decompressor = zstandard.ZstdDecompressor()
 
-        if (metadata.encrypted_size) != 0:
-            encrypted = True
+    __file_ctx: nullcontext | BinaryIO | None
+    __file_pointer: BinaryIO | None
+    mode: Literal['r', 'w', 'a']
+    header: ARKHeader
+    __metadata_collection: 'ARKMetadataCollection'
+    _info_collection: dict[str, ARKInfo]
+    __file_buffer: 'dict[str, ARKFile]'
+    __removed_files: list[str]
+
+    def __init__(self, file: PathOrBinaryFile, mode: Literal['r', 'w', 'a'] = 'r'):
+        if mode not in ['r', 'w', 'a']:
+            raise ValueError(f"Unknown mode: '{mode}'")
+        
+        self.mode = mode
+        self.header = ARKHeader()
+        self.__metadata_collection = ARKMetadataCollection()
+        self._info_collection = {}
+        self.__file_buffer = {}
+        self.__removed_files = []
+
+        match mode:
+            case 'w':
+                # Truncates file
+                file_mode = 'w+b'
+            case 'a':
+                # Does not truncate contents
+                file_mode = 'r+b'
+            case _:
+                # Do not allow writing
+                file_mode = 'rb'
+            
+        self.filename = None
+        if isinstance(file, str):
+            self.filename = file
+        
+        self.__file_ctx = open_binary(file, file_mode)
+        self.__file_pointer = self.__file_ctx.__enter__()
+        if mode in ['r', 'a']:
+            self._read()
+    
+    def _read(self):
+        self._read_header()
+        self._read_metadata_block()
+
+
+    def _read_header(self):
+        if self.__file_pointer:
+            self.header = ARKHeader.unpack(self.__file_pointer)
+
+    def _read_metadata_block(self):
+        if not self.__file_pointer:
+            return
+        
+        self.__metadata_collection._clear()
+        self._info_collection.clear()
+        self.__file_buffer.clear()
+        self.__removed_files.clear()
+        
+        if self.header.metadata_offset <= 0 or self.header.metadata_length <= 0:
+            # Nothing to read
+            return
+        
+        self.__file_pointer.seek(0, os.SEEK_END)
+        filesize = self.__file_pointer.tell()
+
+
+        if filesize < 0:
+            raise BadARKFile('file size is negative, somehow...')
+        
+        if self.header.metadata_offset > filesize:
+            raise BadARKFile('Metadata offset is larger filesize')
+        
+        if self.header.metadata_offset + self.header.metadata_length > filesize:
+            raise BadARKFile("Metadata exceeds filesize")
+        
+        metadata_struct = _METADATA_STRUCTS[self.header.version]
+        metadata_size = dcs.get_struct_size(metadata_struct)
+        raw_metadata_size = self.header.file_count * metadata_size
+        packed_metadata_size = xxtea.get_phdr_size(self.header.metadata_length)
+
+
+        self.__file_pointer.seek(self.header.metadata_offset, os.SEEK_SET)
+
+        raw_metadata = self.__file_pointer.read(packed_metadata_size)
+
+        self.encrypted_metadata = raw_metadata
+
+        raw_metadata = xxtea.decrypt(raw_metadata, self.KEY)
+
+        self.compressed_metadata = raw_metadata
+
+        if self.header.version in [3,4]:
+            raw_metadata = self._decompressor.decompress(raw_metadata, raw_metadata_size)
+        
+        if len(raw_metadata) != raw_metadata_size:
+            raise BadARKFile(f"Expecting metadata size of {raw_metadata_size} but got {len(raw_metadata)}")
+        
+        self.raw_metadata = raw_metadata
+
+        for file_index in range(self.header.file_count):
+            offset = file_index * metadata_size
+
+            metadata = metadata_struct.from_packed(
+                raw_metadata[offset : offset + metadata_size]
+            )
+
+            self.__metadata_collection._add_metadata(ARKMetadata(
+                filename = read_ascii_string(metadata.filename),
+                pathname = read_ascii_string(metadata.pathname),
+                file_location = metadata.file_location,
+                original_filesize = metadata.original_filesize,
+                compressed_size = metadata.compressed_size,
+                encrypted_size = metadata.encrypted_size,
+                timestamp = metadata.timestamp,
+                unknown1 = metadata.unknown1 if isinstance(metadata, _v4MetadataStruct) else 0,
+                unknown2 = metadata.unknown2 if isinstance(metadata, _v4MetadataStruct) else b'',
+                md5sum = metadata.md5sum,
+                priority = metadata.priority,
+            ), raw = True)
+        
+        self.__metadata_collection._sort_collection()
+
+        for metadata in self.__metadata_collection:
+            self._info_collection[metadata.full_path] = self.getinfo(metadata)
+
+    def _write_metadata_block(self, metadata_list: list[ARKMetadata]):
+        data = b''
+        for metadata in metadata_list:
+            data += metadata.pack(self.header.version)
+        
+        self.raw_metadata = data
+
+        # Don't try to compress and encrypt
+        if len(metadata_list) == 0:
+            return data
+        
+        if self.header.version in [3,4]:
+            data = zstandard.compress(data, 12)
+        
+        self.compressed_metadata = data
+
+        data = xxtea.encrypt(data, self.KEY)
+        self.encrypted_metadata = data
+
+        return data
+    
+    def _get_file_data(self, metadata: ARKMetadata) -> bytes:
+        if not self.__file_pointer:
+            raise ValueError('Ark file is closed')
+        
+        file_info = self.getinfo(metadata)
+
+        packed_size = metadata.original_filesize
+        if file_info.compressed:
+            packed_size = metadata.compressed_size
+        if file_info.encrypted:
+            packed_size = metadata.encrypted_size
+
+        self.__file_pointer.seek(metadata.file_location, os.SEEK_SET)
+        file_data = self.__file_pointer.read(packed_size)
+
+        if file_info.encrypted:
             file_data = xxtea.decrypt(file_data, self.KEY)
         
-        if (metadata.compressed_size != metadata.original_filesize):
-            compressed = True
+        if file_info.compressed:
             if self.header.version == 1:
                 file_data = zlib.decompress(file_data)
-            elif self.header.version >= 3:
-                file_data = self._decompresser.decompress(file_data, metadata.original_filesize)
+            elif self.header.version in [3,4]:
+                file_data = self._decompressor.decompress(file_data, metadata.original_filesize)
+            else:
+                raise ValueError(f'Unknown file version: {self.header.version}')
         
+        # Trim extra null bytes
         file_data = file_data[:metadata.original_filesize]
         
-        if metadata.md5sum is not None:
-            if hashlib.md5(file_data).hexdigest() != metadata.md5sum.hex():
-                warnings.warn(f'file "{posix_path(os.path.join(metadata.pathname, metadata.filename))}" hash does not match "{metadata.md5sum.hex()}"')
+        return file_data
+
+    
+    def _buffer_file(self, file: 'ARKFile'):
+        if self.closed:
+            raise ValueError('Ark file is closed')
+        if not self.writable():
+            raise ValueError('Cannot write to readonly ark file')
+        
+        self.__file_buffer[file._info.filename] = file
+        self._info_collection[file.filename] = file._info
+        file._info._dirty = True
+        if file.filename in self.__removed_files:
+            self.__removed_files.remove(file.filename)
+
+    def open(self, file: 'str | ARKInfo | ARKMetadata', mode: Literal['r', 'w', 'a'] = 'r') -> ARKFile:
+        if self.closed:
+            raise ValueError('Ark file is closed')
+        if mode not in ['r', 'w', 'a']:
+            raise ValueError('Mode has to be either "r", "w", or "a"')
+        if mode in ['w', 'a'] and not self.writable():
+            raise ValueError('Cannot write to readonly ark file')
+
+        if isinstance(file, ARKInfo):
+            file = posix_path(file.filename)
+        elif isinstance(file, ARKMetadata):
+            file = file.full_path
+        else:
+            file = posix_path(file)
+        
+        if not file:
+            raise ValueError("Filename can't be blank")
+
+        if file in self.__file_buffer:
+            return self.__file_buffer[file].open(mode)
+        
+        try:
+            file_info = self.getinfo(file)
+        except FileNotFoundError:
+            file_info = None
+        
+        if not file_info:
+            if mode == 'r':
+                raise FileNotFoundError(f'file "{file}" does not exist')
+            
+            return ARKFile(
+                b'',
+                ark_instance = self,
+                metadata = ARKInfo(file),
+                mode = mode,
+            )
+        
+        if mode == 'w':
+            data = b''
+        else:
+            file_metadata = self.__metadata_collection[file_info.filename]
+            data = self._get_file_data(file_metadata)
+        
         
         return ARKFile(
-            os.path.join(metadata.pathname, metadata.filename),
-            file_data,
-            encrypted = encrypted,
-            compressed = compressed,
-            priority = metadata.priority,
-            date = metadata.date,
-            unknown1 = metadata.unknown1,
-            unknown2 = metadata.unknown2,
+            data,
+            ark_instance = self,
+            metadata = file_info,
+            mode = mode,
         )
     
-    def _write_file(self, data: bytes, metadata: FileMetadata, file: BinaryIO):
-        self._files.sort(key = metadata_by_file_location)
-        
-        self._get_file_block(file)
-        
-        header_offset = self.header.struct_size
-        
-        if metadata.file_location < 0:
-            if len(self._files):
-                metadata.file_location = self._files[-1].file_location + self._files[-1].actual_size
-            else:
-                metadata.file_location = self.header.struct_size
-        if metadata.full_path not in self._files:
-            metadata.file_location = self._files[-1].file_location + self._files[-1].actual_size
-            self._files.append(metadata)
-            self.__files_block.seek(metadata.file_location - header_offset)
-            self.__files_block.truncate()
-            self.__files_block.write(data)
-            self.header.metadata_offset = metadata.file_location + metadata.actual_size
-        else:
-            found = self._files[metadata.full_path]
-            current_index = self._files.index(found)
-            rest_start = found.file_location + found.actual_size
-            self.__files_block.seek(rest_start - header_offset)
-            rest = file.read()
-
-            metadata.file_location = found.file_location
-            found.compressed_size = metadata.compressed_size
-            found.encrypted_size = metadata.encrypted_size
-            found.original_filesize = metadata.original_filesize
-            found.md5sum = metadata.md5sum
-            found.priority = metadata.priority
-            found.timestamp = metadata.timestamp
-            found.unknown1 = metadata.unknown1
-            found.unknown2 = metadata.unknown2
-            
-            self.__files_block.seek(metadata.file_location - header_offset)
-            file.truncate()
-            file.write(data)
-            offset = file.tell() - rest_start
-            file.write(rest)
-
-            for i in range(current_index + 1, len(self._files)):
-                self._files[i].file_location += offset
-        
-        self.write(file)
-        
-
-    def _pack_files(self) -> list[tuple[bytes, _v1v3FileMetadataStruct]]:
-        packed = []
-        
-        for file in self._files:
-            if not isinstance(file, ARKFile):
-                raise TypeError('file must be instance of ARKFile')
-            
-            data, meta = file.pack()
-            
-            packed.append((data, meta))
-        
-        return packed
-    
-    def _write_metadata(self, file: BinaryIO):
-        self._files.sort(key = metadata_by_file_location)
-        # print('filesize', get_filesize(file))
-        # print('metadata_offset', self.header.metadata_offset)
-
-        expected_size = self.header.file_count * dcs.get_struct_size(_METADATA_STRUCTS[self.header.version])
-        
-        metadata_block = b''
-        for metadata in self._files:
-            metadata_block += metadata.pack(self.header.version)
-        
-        # print('expected size:', expected_size)
-        # print('actual size:', len(metadata_block))
-        
-        if self.header.version == 1:
-            pass
-        elif self.header.version in [3, 4]:
-            metadata_block = zstandard.compress(metadata_block, 9)
-        
-        # print('compressed size', len(metadata_block))
-        metadata_block = xxtea.encrypt(metadata_block, self.KEY)
-        # print('encrypted size', len(metadata_block))
-
-        return metadata_block
-    
-        
-class ARKFile():
-    def __init__(
+    def extract(
         self,
-        filename: str,
-        data: bytes,
-        compressed: bool = True,
-        encrypted: bool = False,
-        priority: int = 0,
-        date: datetime | None = None,
-        unknown1: int = 0,
-        unknown2: bytes = b'',
-    ) -> None:
-        """File inside `.ark` file.
-
-        Args:
-            filename (str): The filename to be used inside the `.ark` file.
-            data (bytes): File data.
-        """
-        self.fullpath = str(filename)
-        self.data: bytes = bytes(data)
+        file: 'str | ARKInfo | ARKMetadata',
+        path: str | pathlib.Path | None = None,
+        check_hash: bool = True,
+        check_timestamp: bool = True,
+    ):
+        if self.closed:
+            raise ValueError('Ark file is closed')
+    
+        info = self.getinfo(file)
+        if isinstance(file, ARKInfo):
+            name = file.filename
+        elif isinstance(file, ARKMetadata):
+            name = file.full_path
+        else:
+            name = posix_path(file)
         
-        self.compressed = compressed
-        self.encrypted = encrypted
-        
-        self.priority = priority
-        if isinstance(date, (int, float)):
-            date = datetime.fromtimestamp(date)
-        if date is None:
-            date = datetime.now()
-        self.timestamp = date
-
-        self.unknown1: int = unknown1
-        self.unknown2: bytes = unknown2
-    
-    @property
-    def filename(self) -> str:
-        """The base filename, such as `bar.txt`.
-
-        Returns:
-            str: filename
-        """
-        return os.path.basename(self.fullpath)
-    @filename.setter
-    def filename(self, name: str):
-        self.fullpath = os.path.join(self.pathname, name)
-    
-    @property
-    def pathname(self) -> str:
-        """The directory path of the file, such as `foo/`. Outputs in posix format.
-
-        Returns:
-            str: directory
-        """
-        return trailing_slash(posix_path(os.path.dirname(self.fullpath)))
-    @pathname.setter
-    def pathname(self, name: str):
-        self.fullpath = os.path.join(name, self.filename)
-    
-    @property
-    def fullpath(self) -> str:
-        """The full path of the file, such as `foo/bar.txt`. Output is in posix format.
-
-        Returns:
-            str: full path
-        """
-        self.fullpath = self._fullpath
-        return self._fullpath
-
-    @fullpath.setter
-    def fullpath(self, path: str):
-        self._fullpath = posix_path(path)
-    
-    def save(self, path: str | None = None):
-        """Save this file to disk.
-
-        Args:
-            path (str | None, optional): Output filepath. Defaults to `fullpath`.
-        """
-        if path == None:
-            path = self.fullpath
+        if not path:
+            path = '.'
         
         path = os.path.abspath(path)
-        
-        os.makedirs(os.path.dirname(path), exist_ok = True)
-        
-        with open(path, 'wb') as file:
-            file.write(self.data)
-        
-        
-        if self.timestamp > datetime.now():
-            logging.debug(f'{self.fullpath} date {self.timestamp} is after today {datetime.now()}')
-        
-        timestamp = int(self.timestamp.timestamp())
-        os.utime(path, (timestamp,timestamp))
+        output = os.path.join(path, name)
+
+        extract = True
+        if os.path.exists(output):
+            if check_timestamp and info.timestamp:
+                existing_timestamp = os.path.getatime(output)
+                if info.timestamp.timestamp() < existing_timestamp:
+                    extract = False
+
+            if extract and check_hash:
+                if check_hash:
+                    with open(output, 'rb') as diskfile:
+                        existing_hash = hashlib.md5(diskfile.read()).digest()
+                        if existing_hash == info._md5sum:
+                            extract = False
+
+        if extract:
+            with self.open(file, 'r') as arkfile:
+                os.makedirs(os.path.dirname(output), exist_ok = True)
+                with open(output, 'wb') as diskfile:
+                    # shutil.copyfileobj(arkfile, diskfile)
+                    diskfile.write(arkfile.getbuffer())
+                
+                if info.timestamp:
+                    timestamp = int(info.timestamp.timestamp())
+                    os.utime(output, times = (timestamp, timestamp))
     
-    def pack(self) -> tuple[bytes, FileMetadata]:
-        result = self.data
-        metadata = FileMetadata(
-            filename = self.filename,
-            pathname = self.pathname,
-            file_location = -1,
-            original_filesize = len(result),
-            compressed_size = 0,
-            encrypted_size = 0,
-            timestamp = int(self.timestamp.timestamp()),
-            md5sum = bytes.fromhex(hashlib.md5(result).hexdigest()),
-            priority = self.priority,
-            unknown1 = self.unknown1,
-            unknown2 = self.unknown2,
+    def read(self, file: 'str | ARKInfo | ARKMetadata'):
+        if self.closed:
+            raise ValueError('Ark file is closed')
+        
+        with self.open(file, 'r') as arkfile:
+            return arkfile.read()
+    
+    def write(
+        self,
+        filename: str,
+        arcname: str | None = None,
+        use_edit_time: bool = True,
+        compressed: bool = True,
+        encrypted: bool = False,
+    ):
+        if self.closed:
+            raise ValueError('Cannot write to closed ark file')
+        if not self.writable():
+            raise ValueError('Cannot write in readonly mode')
+        
+        if arcname is None:
+            arcname = os.path.basename(filename)
+        
+        with open(filename, 'rb') as file:
+            with self.open(arcname, 'w') as arkfile:
+                shutil.copyfileobj(file, arkfile)
+
+                if use_edit_time:
+                    arkfile.timestamp = datetime.fromtimestamp(os.path.getmtime(filename))
+                
+                arkfile.compressed = compressed
+                arkfile.encrypted = encrypted
+    
+    def remove(self, file: 'str | ARKInfo | ARKMetadata'):
+        if self.closed:
+            raise ValueError('Cannot write to closed ark file')
+        if not self.writable():
+            raise ValueError('Cannot write in readonly mode')
+
+        if isinstance(file, ARKInfo):
+            file = file.filename
+        elif isinstance(file, ARKMetadata):
+            file = file.full_path
+        else:
+            file = posix_path(file)
+        
+        if file not in self._info_collection:
+            raise FileNotFoundError(f'File {file} not found')
+        
+        self.__removed_files.append(file)
+        if file in self.__file_buffer:
+            del self.__file_buffer[file]
+        del self._info_collection[file]
+
+    def getinfo(self, file: 'str | ARKInfo | ARKMetadata') -> ARKInfo:
+        if self.closed:
+            raise ValueError('Ark file is closed')
+        
+        if isinstance(file, ARKInfo):
+            return file
+        elif isinstance(file, ARKMetadata):
+            metadata = file
+
+            timestamp = None
+
+            timestamp = datetime.fromtimestamp(metadata.timestamp)
+            
+            return ARKInfo(
+                _filename = metadata.full_path,
+                _timestamp = timestamp,
+                _compressed = metadata.compressed_size != metadata.original_filesize,
+                _encrypted = metadata.encrypted_size > 0,
+                _size = metadata.original_filesize,
+                _md5sum = metadata.md5sum,
+                _priority = metadata.priority,
+                _unknown1 = metadata.unknown1,
+                _unknown2 = metadata.unknown2,
+            )
+        else:
+            info = self._info_collection.get(file)
+            if not info:
+                raise FileNotFoundError(f'File with the name "{file}" does not exist')
+            return info
+    
+    def getmetadata(self, file: 'str | ARKInfo | ARKMetadata'):
+        if self.closed:
+            raise ValueError('Ark file is closed')
+
+        if isinstance(file, ARKMetadata):
+            return file
+        elif isinstance(file, str):
+            if file in self.__metadata_collection:
+                return self.__metadata_collection[file]
+            elif file in self._info_collection:
+                file = self._info_collection[file]
+            else:
+                raise FileNotFoundError(f'Cannot find file: {file}')
+        elif not file.dirty and file.filename in self._info_collection and file.filename in self.__metadata_collection:
+            return self.__metadata_collection[file.filename]
+        
+        timestamp = 0
+        if file.timestamp is not None:
+            timestamp = int(file.timestamp.timestamp())
+        
+        return ARKMetadata(
+            os.path.basename(file.filename),
+            os.path.dirname(file.filename),
+            original_filesize = file.size,
+            md5sum = file._md5sum,
+            priority = file.priority,
+            unknown1 = file.unknown1,
+            unknown2 = file.unknown2,
+            timestamp = timestamp,
         )
+
+    def infolist(self) -> list[ARKInfo]:
+        if self.closed:
+            raise ValueError('Ark file is closed')
+        
+        return list(self._info_collection.values())
+    
+    def metadata_list(self):
+        if self.closed:
+            raise ValueError('Ark file is closed')
+        
+        return [self.getmetadata(info) for info in self._info_collection.values()]
+
+    def namelist(self) -> list[str]:
+        if self.closed:
+            raise ValueError('Ark file is closed')
+        
+        return list(self._info_collection.keys())
+    
+    def testark(self):
+        if self.closed:
+            raise ValueError('Ark file is closed')
+        
+        errors: list[str] = []
+        for info in self.infolist():
+            with self.open(info, 'r') as arkfile:
+                if info.md5sum != arkfile.md5sum:
+                    errors.append(info.filename)
+        
+        return errors
+    
+    def test(self):
+        return len(self.testark()) == 0
+        
+    
+    def save(self):
+        if not self.__file_pointer:
+            raise ValueError('File must be open')
+        if not self.writable():
+            raise ValueError('File is not writable')
+        
+        filename = os.path.basename(self.filename or '')
+
+        temp_header = self.header.copy()
+        temp_header.file_count = len(self._info_collection)
+        temp_header.metadata_offset = -1
+        temp_header.metadata_length = -1
+
+        new_metadata: list[ARKMetadata] = []
+        
+        with tempfile.TemporaryFile('w+b', prefix = 'luna-kit-', suffix = f'-{filename}.ark') as temp:
+            temp.write(b'\x00' * temp_header.packed_size) # Placeholder bytes
+            for info in self._info_collection.values():
+                if info.dirty:
+                    data, metadata = self.__file_buffer[info.filename].pack()
+                    metadata.file_location = temp.tell()
+                    temp.write(data)
+                else:
+                    original_metadata = self.__metadata_collection[info.filename]
+                    metadata = original_metadata.copy()
+                    metadata.file_location = temp.tell()
+
+                    self.__file_pointer.seek(original_metadata.file_location)
+                    size = original_metadata.encrypted_size or original_metadata.compressed_size or original_metadata.original_filesize
+                    temp.write(self.__file_pointer.read(size))
+                
+                new_metadata.append(metadata)
+            
+            temp_header.metadata_offset = temp.tell()
+            packed_metadata = self._write_metadata_block(new_metadata)
+            temp_header.metadata_length = len(packed_metadata)
+            temp.write(packed_metadata)
+
+            temp.seek(0)
+
+            temp.write(temp_header.pack())
+
+            temp.seek(0)
+            self.__file_pointer.seek(0)
+            self.__file_pointer.truncate()
+            shutil.copyfileobj(temp, self.__file_pointer)
+        
+        self.header = temp_header
+        self.__file_buffer.clear()
+        self.__removed_files.clear()
+        self._info_collection.clear()
+        self.__metadata_collection._clear()
+        for metadata in new_metadata:
+            self.__metadata_collection._add_metadata(metadata, raw = True)
+            self._info_collection[metadata.full_path] = self.getinfo(metadata)
+
+
+    def close(
+        self,
+        /,
+        exc_type = None,
+        exc_val = None,
+        exc_traceback = None,
+    ):
+        if self.__file_ctx:
+            if self.writable() and self.dirty:
+                self.save()
+            
+            self.__file_pointer = None
+            self.__file_ctx.__exit__(exc_type, exc_val, exc_traceback)
+            self.__file_ctx = None
+
+    @property
+    def dirty(self):
+        return len(self.__file_buffer) > 0 or len(self.__removed_files) > 0
+
+    def writable(self) -> bool:
+        return self.__file_pointer is not None and self.mode in ['w', 'a']
+    
+    @property
+    def closed(self):
+        return self.__file_pointer is None or self.__file_pointer.closed
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_traceback):
+        self.close(
+            exc_type = exc_type,
+            exc_val = exc_val,
+            exc_traceback = exc_traceback,
+        )
+
+
+class ARKFile(io.BufferedIOBase):
+    _ark: ARK
+    _info: ARKInfo
+    _mode: Literal['r', 'w', 'a']
+    _open: bool
+    
+    def __init__(
+        self,
+        initial_data: bytes,
+        ark_instance: ARK,
+        metadata: ARKInfo,
+        mode: Literal['r', 'w', 'a'] = 'r',
+    ):
+        if mode not in ['r', 'w', 'a']:
+            raise ValueError('Mode has to be either "r", "w", "a"')
+        
+        if mode in ['w', 'a'] and not ark_instance.writable():
+            raise ValueError('Cannot write to file in readonly ARK file')
+
+        if mode == 'w':
+            initial_data = b''
+    
+        self._buffer = io.BytesIO(initial_data)
+        self._ark = ark_instance
+        self._info = metadata
+        self._open = False
+        self.open(mode = mode)
+    
+    @property
+    def mode(self) -> str:
+        if self._mode == 'a':
+            mode = 'r+'
+        elif self._mode == 'w':
+            mode = 'w+'
+        else:
+            mode = 'r'
+        return mode + 'b'
+    
+    def open(self, mode: Literal['r', 'w', 'a'] = 'r') -> Self:
+        if self._open:
+            raise ValueError('ARKFile already open')
+        
+        if mode not in ['r', 'w', 'a']:
+            raise ValueError('Mode has to be either "r", "w", "a"')
+        
+        if mode in ['w', 'a'] and not self._ark.writable():
+            raise ValueError('Cannot write to file in readonly ARK file')
+        
+        self._mode = mode
+        
+        self._open = True
+        if mode == 'w':
+            self.seek(0)
+            self.truncate()
+        elif mode == 'a':
+            self.seek(0, os.SEEK_END)
+        else:
+            self.seek(0)
+
+        return self
+    
+    def readable(self) -> bool:
+        return self._open
+
+    def writable(self) -> bool:
+        return self._open and self._ark.writable() and self._mode in ['w', 'a']
+    
+    def _check_open(self):
+        if not self._open:
+            raise ValueError('Cannot read closed file')
+
+    def _check_readable(self):
+        if not self.readable():
+            raise ValueError('File is not readable')
+    
+    def _check_writable(self):
+        if not self.writable():
+            raise ValueError("Cannot write to file in readonly mode")
+    
+    def seek(self, offset: int, whence: int = os.SEEK_SET, /) -> int:
+        self._check_open()
+        return self._buffer.seek(offset, whence)
+    
+    def tell(self) -> int:
+        self._check_open()
+        return self._buffer.tell()
+
+    def read(self, size: int | None = -1, /) -> bytes:
+        self._check_open()
+        self._check_readable()
+        return self._buffer.read(size)
+    
+    def readline(self, size: int | None = -1, /) -> bytes:
+        self._check_open()
+        self._check_readable()
+        return self._buffer.readline(size)
+
+    def readlines(self, size: int = -1, /) -> list[bytes]:
+        self._check_open()
+        self._check_readable()
+        return self._buffer.readlines(size)
+    
+    def write(self, buffer: Buffer, /) -> int:
+        self._check_open()
+        self._check_writable()
+        return self._buffer.write(buffer)
+
+    def writelines(self, lines: Iterable[Buffer], /) -> None:
+        self._check_open()
+        self._check_writable()
+        return self._buffer.writelines(lines)
+    
+    def truncate(self, size: int | None = None, /) -> int:
+        self._check_open()
+        self._check_writable()
+        return self._buffer.truncate(size)
+    
+    def getbuffer(self):
+        self._check_open()
+        self._check_readable()
+        return self._buffer.getbuffer()
+    
+    def __next__(self) -> bytes:
+        self._check_open()
+        self._check_readable()
+        return self._buffer.__next__()
+    
+    def __iter__(self) -> Iterator[bytes]:
+        self._check_open()
+        self._check_readable()
+        return self._buffer.__iter__()
+    
+    def flush(self) -> None:
+        self._check_open()
+        if not self.writable():
+            return
+        
+        self._buffer.flush()
+        self._info._size = self.size
+        self._info._md5sum = hashlib.md5(self._buffer.getvalue()).digest()
+
+        self._ark._buffer_file(self)
+    
+    def close(self) -> None:
+        if not self._open:
+            return
+        
+        if self.writable():
+            self.flush()
+        self._open = False
+    
+    def pack(self):
+        self.close()
+        metadata = self._ark.getmetadata(self._info)
+        result = self._buffer.getvalue()
+        metadata.original_filesize = len(result)
+
         if self.compressed:
-            result = zstandard.compress(result, 9)
-            metadata.compressed_size = len(result)
+            if self._ark.header.version == 1:
+                result = zlib.compress(result)
+            elif self._ark.header.version in [3,4]:
+                result = zstandard.compress(result)
+            else:
+                raise BadARKFile(f'Unknown file version: {self._ark.header.version}')
+        
+        metadata.compressed_size = len(result)
 
         if self.encrypted:
-            result = xxtea.encrypt(result, ARK.KEY)
+            result = xxtea.encrypt(result, self._ark.KEY)
             metadata.encrypted_size = len(result)
         
         return result, metadata
 
+    
+    @property
+    def closed(self) -> bool:
+        return not self._open
 
-class ARKMetadataCollection(list):
-    def __init__(self, metadatas: Iterable[FileMetadata] | None = None):
-        if metadatas is None:
-            super().__init__()
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+    
+    @property
+    def filename(self):
+        return self._info.filename
+    
+    @property
+    def compressed(self):
+        return self._info.compressed
+    @compressed.setter
+    def compressed(self, value: bool):
+        self._check_open()
+        self._check_writable()
+        self._info._compressed = value
+    
+    @property
+    def encrypted(self):
+        return self._info.encrypted
+    @encrypted.setter
+    def encrypted(self, value: bool):
+        self._check_open()
+        self._check_writable()
+        self._info._encrypted = value
+    
+    @property
+    def priority(self):
+        return self._info.priority
+    @priority.setter
+    def priority(self, value: int):
+        self._check_open()
+        self._check_writable()
+        self._info._priority = value
+    
+    @property
+    def timestamp(self):
+        return self._info.timestamp
+    @timestamp.setter
+    def timestamp(self, value: datetime | None):
+        self._check_open()
+        self._check_writable()
+        self._info._timestamp = value
+
+    @property
+    def size(self):
+        pos = self._buffer.tell()
+        self._buffer.seek(0, os.SEEK_END)
+        size = self._buffer.tell()
+        self._buffer.seek(pos)
+        return size
+    
+    def __len__(self):
+        return self.size
+    
+    @property
+    def md5sum(self):
+        return hashlib.md5(self._buffer.getvalue()).hexdigest()
+
+class ARKMetadataCollection:
+    _metadata_list: list[ARKMetadata]
+    _metadata_dict: dict[str, ARKMetadata]
+    
+    def __init__(self):
+        self._metadata_list = []
+        self._metadata_dict = {}
+
+    def __getitem__(self, key: int | str) -> ARKMetadata:
+        if isinstance(key, str):
+            key = posix_path(key)
+            return self._metadata_dict[key]
+        
+        return self._metadata_list[key]
+    
+    T = TypeVar('T')
+    def get(self, key: int | str, default: T = None) -> ARKMetadata | T:
+        try:
+            return self.__getitem__(key)
+        except KeyError:
+            return default
+
+
+    def __iter__(self) -> Iterator[ARKMetadata]:
+        return self._metadata_list.__iter__()
+
+    def __len__(self) -> int:
+        return self._metadata_list.__len__()
+
+    def __contains__(self, key: str | ARKMetadata) -> bool:
+        if isinstance(key, ARKMetadata):
+            return key in self._metadata_list
+        
+        key = posix_path(key)
+
+        return key in self._metadata_dict
+    
+    def index(
+        self,
+        value: str | ARKMetadata,
+        start: int = 0,
+        stop: int = sys.maxsize,
+        /
+    ) -> int | None:
+        if isinstance(value, str):
+            value = posix_path(value)
         else:
-            super().__init__(metadatas)
-    
-    def get(self, key: str | int, default: Any = None) -> FileMetadata | Any:
-        try:
-            return self.__getitem__(key)
-        except KeyError:
-            return default
-    
-    def setdefault(self, key: str | int, default: FileMetadata) -> FileMetadata:
-        try:
-            return self.__getitem__(key)
-        except KeyError:
-            self.__setitem__(key, default)
-            return default
-    
-    def sort(self, *, key: Callable[[FileMetadata], Any] | None = lambda m: m.file_location, reverse: bool = False):
-        return super().sort(key = key, reverse = reverse)
+            value = value.full_path
         
-    def __getitem__(self, key: str | int) -> FileMetadata:
-        if isinstance(key, str):
-            for index, value in enumerate(self):
-                if value.full_path == key:
-                    key = index
-                    break
-        
-        return super().__getitem__(key)
+        value = self._metadata_dict[value]
+        return self._metadata_list.index(value, start, stop)
 
-    def __setitem__(self, key: str | int, value: FileMetadata):
-        if isinstance(key, str):
-            for index, value in enumerate(self):
-                if value.full_path == key:
-                    key = index
-                    break
-        
-        if isinstance(key, str):
-            value.full_path = key
-            self.append(value)
+    def _add_metadata(self, metadata: ARKMetadata, raw: bool = True):
+        if not isinstance(metadata, ARKMetadata):
+            raise TypeError(f'Wrong type: {type(metadata).__name__}')
+
+        if raw:
+            self._metadata_list.append(metadata)
+            self._metadata_dict[metadata.full_path] = metadata
             return
         
-        return super().__setitem__(key, value)
+        existing_index = self.index(metadata.full_path)
+
+        if existing_index is None:
+            self._metadata_list.append(metadata)
+        else:
+            self._metadata_list[existing_index] = metadata
+        
+        self._metadata_dict[metadata.full_path] = metadata
+
+        self._sort_collection()
+
+
+    def _sort_collection(self):
+        self._metadata_list.sort(key = lambda item: item.file_location)
     
-    def index(self, value: str | FileMetadata, start: int = 0, stop: int = sys.maxsize):
-        if isinstance(value, str):
-            for index in range(start, min(stop, len(self))):
-                if self[index].full_path == value:
-                    return index
-        return super().index(value, start, stop)
-    
-    def copy(self):
-        return ARKMetadataCollection(self)
-    
-    def __contains__(self, value: FileMetadata | str):
-        if isinstance(value, str):
-            for metadata in self:
-                if metadata.full_path == value:
-                    return True
-        return super().__contains__(value)
-    
-    def __iter__(self) -> Iterator[FileMetadata]:
-        return super().__iter__()
+    def _clear(self):
+        self._metadata_list.clear()

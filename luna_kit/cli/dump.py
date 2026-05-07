@@ -96,7 +96,7 @@ class DumpCommand(CLICommand):
     
     @classmethod
     def run_command(cls, args):
-        from typing import Iterable, Optional, Sequence, Union
+        from typing import Iterable, Optional, Sequence, Union, overload, Literal
         from rich.progress import (
             BarColumn,
             MofNCompleteColumn,
@@ -145,8 +145,12 @@ class DumpCommand(CLICommand):
                     description = description,
                 )
 
+        @overload
+        def glob_files(pattern: str, folders: list[str] | set[str], with_parent: Literal[True]) -> list[tuple[str, str]]: ...
+        @overload
+        def glob_files(pattern: str, folders: list[str] | set[str], with_parent: Literal[False] = False) -> set[str]: ...
         def glob_files(pattern: str, folders: list[str] | set[str], with_parent: bool = False) -> set[str] | list[tuple[str, str]]:
-            files = [] if with_parent else set()
+            files: list[tuple[str, str]] | set[str] = [] if with_parent else set()
             for folder in folders:
                 new_files = {(folder, os.path.join(folder, file)) for file in glob(
                     pattern,
@@ -171,6 +175,7 @@ class DumpCommand(CLICommand):
         try:
             arks = sort_ark_filenames(arks)
         except:
+            console.print_exception()
             console.print('[red]Could not sort files[/]')
             arks.sort()
 
@@ -189,18 +194,16 @@ class DumpCommand(CLICommand):
             try:
                 with ARK(ark_filename) as ark:
                     for file_metadata in track(
-                        ark.files,
+                        ark.infolist(),
                         description = os.path.basename(ark_filename),
                         transient = True,
                     ):
-                        if args.filter and (not fnmatch(file_metadata.full_path, args.filter)):
+                        if args.filter and (not fnmatch(file_metadata.filename, args.filter)):
                             continue
                         try:
-                            file = ark.extract(file_metadata)
-                            filepath = os.path.join(folder, file_metadata.full_path)
-                            file.save(filepath)
+                            ark.extract(file_metadata, folder)
                         except Exception as e:
-                            e.add_note(f'filename: {file_metadata.full_path}')
+                            e.add_note(f'filename: {file_metadata.filename}')
                             if args.ignore_errors:
                                 console.print(e)
                             else:
@@ -271,7 +274,7 @@ class DumpCommand(CLICommand):
     
         if args.atlas:
             console.print('Splitting texatlas files')
-            atlas_files: dict[str, str] = glob_files('*/**.texatlas', extracted_folders, with_parent = True)
+            atlas_files = glob_files('*/**.texatlas', extracted_folders, with_parent = True)
 
             with Progress(*COLUMNS, console = console, transient = True) as progress:
                 atlas_progress = progress.add_task('Splitting...')
