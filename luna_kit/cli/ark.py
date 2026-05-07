@@ -1,9 +1,9 @@
 import os
 from argparse import ArgumentParser, Namespace
 
-from rich.progress import Progress, track
+from rich.progress import Progress, track, TextColumn, BarColumn, MofNCompleteColumn, TimeRemainingColumn
 
-from ..console import console
+from ..console import console, track
 from ._actions import GlobFiles
 from .cli import CLI, CLICommand
 
@@ -15,146 +15,200 @@ class ARKParser(CLICommand):
     
     @classmethod
     def build_args(cls, parser: ArgumentParser):
-        parser.add_argument(
+        subcommand = parser.add_subparsers(
+            title = 'Action',
+            dest = 'action',
+        )
+
+        list_ = subcommand.add_parser(
+            'list',
+            help = 'List all files in an ark file',
+        )
+
+        list_.add_argument(
             'files',
             nargs = '+',
             help = 'input .ark files',
             action = GlobFiles,
         )
-        
-        parser.add_argument(
-            '-s', '--separate-folders',
-            dest = 'separate_folders',
-            help = 'Output each .ark file in separate folders',
-            action = 'store_true',
+
+        extract = subcommand.add_parser(
+            'extract',
+            help = 'Extract ark files',
         )
         
-        parser.add_argument(
+        extract.add_argument(
+            'files',
+            nargs = '+',
+            help = 'input .ark files',
+            action = GlobFiles,
+        )
+
+        extract.add_argument(
             '-o', '--output',
             dest = 'output',
-            help = 'output directory for .ark file(s)',
+            help = 'Output folder. Defaults to the ark filename. You can add {name} for the ark filename.',
         )
-        
-        parser.add_argument(
+
+        extract.add_argument(
             '-i', '--ignore-errors',
             dest = 'ignore_errors',
+            help = "Don't exit on error",
             action = 'store_true',
-            help = 'ignore errors',
         )
-        
-        parser.add_argument(
-            '-f', '--filter',
+
+        extract.add_argument(
+            '-f', '--filter', '--files',
             dest = 'filter',
-            help = 'Filter extracted files based on glob pattern',
+            nargs = '+',
+            help = 'Only extract these files. Can be glob pattern.'
         )
-        
-        parser.add_argument(
-            '-v', '--data-version',
-            dest = 'data_version',
-            action = 'store_true',
-            help = 'print data version from ark files',
+
+        create = subcommand.add_parser(
+            'create',
+            help = 'Create an ark file',
         )
+
+        add = subcommand.add_parser(
+            'add',
+            help = 'Add files to an ark file',
+        )
+
+        for action in [create, add]:
+            action.add_argument(
+                'input_files',
+                nargs = '+',
+                help = 'input files/folders to add. Will stript dirnames.',
+                # action = GlobFiles,
+            )
+
+            action.add_argument(
+                '-t', '--use-system-timestamps',
+                dest = 'use_system_timestamps',
+                action = 'store_true',
+                help = 'Use the last modified time on files instead of the current date.',
+            )
+
+            action.add_argument(
+                '-o', '--output',
+                dest = 'output',
+                help = 'Output .ark file.',
+                required = True,
+            )
     
     @classmethod
     def run_command(cls, args: Namespace):
         import os
         import fnmatch
-        from glob import glob
         
         from ..ark import ARK
         from ..ark_filename import sort_ark_filenames
-            
-        output = './'
-        
-        files: list[str] = []
 
-        for file in args.files:
-            if os.path.isdir(file):
-                files.extend(glob(os.path.join(file, '*.ark')))
-            else:
-                files.append(file)
-        
-        try:
-            files = sort_ark_filenames(files)
-        except ValueError:
-            files.sort()
-        
-        if len(files) == 0:
-            console.print('[red]No files found[/]')
-            return
-        
-        if args.output:
-            output = args.output
-        elif len(files) == 1:
-            output = os.path.splitext(os.path.basename(args.files[0]))[0]
-        
-        def extract_all(ark_file: ARK, output: str):
-            failed = []
-            
-            for file_metadata in track(
-                ark_file.files,
-                console = console,
-                description = 'Extracting...',
-            ):
-                if args.filter and (not fnmatch.fnmatch(file_metadata.full_path, args.filter)):
-                    continue
-                
-                console.print(f'extracting: [yellow]{file_metadata.full_path}[/yellow]')
-                try:
-                    file = ark_file.read_file(file_metadata)
-                    file.save(os.path.join(output, file_metadata.full_path))
-                except Exception as e:
-                    if args.ignore_errors:
-                        failed.append(file_metadata.full_path)
-                        console.print(f'[red]could not extract {file_metadata.full_path}[/red]')
-                        continue
-                    else:
-                        e.add_note(f'file: {file_metadata.full_path}')
-                        raise e
-            
-            return failed
-        
-        versions = {}
-        
-        if len(files) == 1:
-            console.print(f'Opening: [yellow]{files[0]}[/]')
-            with ARK(files[0]) as ark_file:
-                if args.data_version:
-                    version = ark_file.data_version
-                    if version:
-                        versions[files[0]] = version
-                if not args.data_version or args.output:
-                    failed = extract_all(ark_file, output)
-        else:
-            failed: dict[str, list[str]] = {}
+        if args.action == 'list':
+            files: list[str] = args.files
             for filename in files:
-                filename: str
-                if args.separate_folders:
-                    path = os.path.join(output, os.path.splitext(os.path.basename(filename))[0])
-                else:
-                    path = output
-                
-                console.print(f'Opening: [yellow]{filename}[/]')
-                with ARK(filename) as ark_file:
-                    if args.data_version:
-                        version = ark_file.data_version
-                        if version:
-                            versions[filename] = version
-                    if not args.data_version or args.output:
-                        failed[filename] = extract_all(ark_file, path)
+                console.print(f'[yellow]{os.path.basename(filename)}[/]')
+                with ARK(filename) as ark:
+                    for info in ark.infolist():
+                        print(info.filename, info.timestamp)
+        
+        elif args.action == 'extract':
+            arks: list[str] = args.files
+            if len(arks) == 0:
+                console.print('[red]No ark files found[/]')
+                return
             
-            if len(failed) > 0:
-                for arkfile, files in failed.items():
-                    for file in files:
-                        console.print(f'[red]failed to extract {file} from {arkfile}')
-
-        if args.data_version:
-            if len(versions):
-                if len(versions) == 1:
-                    console.print(list(versions.values())[0])
-                else:
-                    for filename, version in versions.items():
-                        console.print(f'{os.path.basename(filename)}: {version}')
+            try:
+                arks = sort_ark_filenames(arks)
+            except:
+                console.print_exception()
+                console.print('[red]Could not smart sort files, sorting alphabetically[/]')
+                arks.sort()
+            
+            if args.output is None:
+                base_output = './{name}'
             else:
-                console.print("[red]could not find version[/]")
-                        
+                base_output: str = args.output
+            
+            base_output = os.path.abspath(base_output)
+
+            for ark_filename in arks:
+                output = base_output.format(name = os.path.splitext(os.path.basename(ark_filename)))
+                errors = 0
+                try:
+                    with ARK(ark_filename) as ark:
+                        console.print(f'Extracting [yellow]{os.path.basename(ark_filename)}[/]')
+                        for filename in track(
+                            ark.namelist(),
+                            description = 'Extracting...',
+                            transient = True,
+                            columns = [
+                                TextColumn("[progress.description]{task.description}"),
+                                BarColumn(),
+                                MofNCompleteColumn(),
+                                TimeRemainingColumn(),
+                            ]
+                        ):
+                            if isinstance(args.filter, list) and not any(fnmatch.fnmatch(filename, pattern) for pattern in args.filter):
+                                continue
+                            try:
+                                ark.extract(filename, output)
+                            except Exception as e:
+                                e.add_note(f'filename: {filename}')
+                                errors += 1
+                                if args.ignore_errors:
+                                    console.print(e)
+                                else:
+                                    raise e
+                    
+                    console.print(f'[{"green" if errors == 0 else "yellow"}]Finished with {errors} errors[/]')
+
+                except Exception as e:
+                    e.add_note(f'ark: {os.path.basename(ark_filename)}')
+                    raise e
+        elif args.action in ['add', 'create']:
+            output: str = os.path.abspath(args.output)
+            os.makedirs(os.path.dirname(output), exist_ok = True)
+
+            mode = 'a' if args.action == 'add' else 'w'
+
+            # list[tuple[filename, arcname]]
+            added_files: list[tuple[str, str]] = []
+
+            for filename in args.input_files:
+                filename: str
+                arcname = None
+                if '=' in filename:
+                    filename, arcname = filename.rsplit('=', 1)
+                
+                if os.path.isfile(filename):
+                    if arcname is None:
+                        arcname = os.path.basename(filename)
+                    
+                    added_files.append((filename, arcname))
+                elif os.path.isdir(filename):
+                    if arcname is None:
+                        arcname = ''
+                    for dirpath, dirnames, filenames in os.walk(filename):
+                        for file in filenames:
+                            added_files.append((
+                                os.path.join(dirpath, file),
+                                os.path.join(arcname, os.path.relpath(os.path.join(dirpath, file), filename)),
+                            ))
+                else:
+                    console.print(f'[red]file "{filename}" not found[/]')
+            
+            if len(added_files) == 0:
+                console.print('[red]No files to add[/]')
+                return
+
+            with ARK(output, mode) as arkfile:
+                for inpath, arcname in added_files:
+                    arkfile.write(
+                        inpath,
+                        arcname,
+                        use_edit_time = args.use_system_timestamps,
+                    )
+            
+            console.print(f'[green]Added {len(added_files)} files[/]')
+
