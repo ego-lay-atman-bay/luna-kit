@@ -6,7 +6,7 @@ import struct
 from collections import UserDict
 from typing import BinaryIO
 
-from .file_utils import is_binary_file, is_text_file
+from .file_utils import is_binary_file, is_text_file, PathOrBinaryFile, open_binary
 
 
 class LOC(UserDict):
@@ -22,30 +22,33 @@ class LOC(UserDict):
         if file is not None:
             self.read(file)
 
-    def read(self, file: str | bytes | bytearray | BinaryIO):
+    def read(self, file: PathOrBinaryFile):
         self.filename = ''
-
-        if isinstance(file, str) and os.path.isfile(file):
-            context_manager = open(file, 'rb')
+        if isinstance(file, str):
             self.filename = file
-        elif isinstance(file, (bytes, bytearray)):
-            context_manager = io.BytesIO(file)
-        elif is_binary_file(file):
-            context_manager = contextlib.nullcontext(file)
-        elif is_text_file(file):
-            raise TypeError('file must be open in binary mode')
-        else:
-            raise TypeError('cannot open file')
 
         self.data.clear()
         
-        with context_manager as open_file:
+        with open_binary(file, 'r') as open_file:
             self.__read_header(open_file)
 
             for x in range(self._string_count):
                 key = self.__read_key(open_file)
                 value = self.__read_value(open_file)
                 self.data[key] = value
+    
+    def write(self, file: PathOrBinaryFile):
+        """
+        Write LOC file. The filename should be {language}.loc
+
+        Args:
+            file (PathOrBinaryFile): Output .loc file to write to.
+        """
+        with open_binary(file, 'w') as open_file:
+            self.__write_header(open_file)
+            for key, value in self.strings.items():
+                self.__write_key(open_file, key)
+                self.__write_value(open_file, value)
     
     def export(self, filename: str | None = None, **kwargs):
         """Export strings to a json file. Extra keyword arguments are passed into `json.dump()`, so you can do `.export('file.json', indent = 2)`.
@@ -64,7 +67,10 @@ class LOC(UserDict):
             json.dump(self.strings, file, **kwargs)
     
     def __read_header(self, file: BinaryIO):
-        self._string_count = struct.unpack('I',file.read(4))[0]
+        self._string_count = struct.unpack('<I',file.read(4))[0]
+    
+    def __write_header(self, file: BinaryIO):
+        file.write(struct.pack('<I', len(self.strings)))
     
     def __read_key(self, file: BinaryIO):
         """Read the string key from the file. This assumes that the current position in the file object is on the key length.
@@ -76,7 +82,7 @@ class LOC(UserDict):
             str: string key
         """
         length = struct.unpack(
-            'I',
+            '<I',
             file.read(4),
         )[0]
         
@@ -85,6 +91,11 @@ class LOC(UserDict):
         key = file.read(length)
         
         return key.decode()
+    
+    def __write_key(self, file: BinaryIO, key: str):
+        encoded = key.encode()
+        file.write(struct.pack('<I', len(encoded)))
+        file.write(encoded)
     
     def __read_value(self, file: BinaryIO):
         """Read the string from the file. This assumes that the current position in the file object is on the string length. The string is encoded with utf-16, taking 2 bytes per character, with the length being the string length (not the byte length, so byte length = length * 2).
@@ -103,6 +114,11 @@ class LOC(UserDict):
         value = file.read(length * 2)
         
         return value.decode('utf-16')
+    
+    def __write_value(self, file: BinaryIO, value: str):
+        encoded = value.encode('utf-16')
+        file.write(struct.pack('<I', len(encoded) // 2))
+        file.write(encoded)
 
     def translate(self, key: str):
         data = {key.strip(): value for key, value in self.data.items()}
