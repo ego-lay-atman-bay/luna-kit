@@ -10,7 +10,6 @@ import shutil
 import struct
 import sys
 import tempfile
-import time
 from typing import (
     Annotated,
     BinaryIO,
@@ -534,7 +533,7 @@ class ARK:
         if file.filename in self.__removed_files:
             self.__removed_files.remove(file.filename)
 
-    def open(self, file: 'str | ARKInfo | ARKMetadata', mode: Literal['r', 'w', 'a'] = 'r') -> ARKFile:
+    def open(self, file: 'str | ARKInfo | ARKMetadata', mode: Literal['r', 'w', 'a'] = 'r') -> 'ARKFile':
         if self.closed:
             raise ValueError('Ark file is closed')
         if mode not in ['r', 'w', 'a']:
