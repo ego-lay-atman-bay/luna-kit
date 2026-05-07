@@ -102,7 +102,7 @@ def tostring(
     pretty_print: bool = False,
     standalone: bool | None = None,
     doctype: str | None = None
-):
+) -> bytes:
     result = b''
     for index, child in enumerate(element):
         if isinstance(child, str):
