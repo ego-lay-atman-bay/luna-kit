@@ -1,6 +1,7 @@
 import logging
 import sys
 from abc import abstractmethod
+import argcomplete
 from argparse import ArgumentParser, Namespace
 from typing import Type
 
@@ -24,7 +25,7 @@ class CLI():
         
         self.build_args()
     
-    COMMANDS: 'dict[str,CLICommand]' = {}
+    COMMANDS: 'dict[str, Type[CLICommand]]' = {}
     
     @classmethod
     def register_command(cls, command: 'Type[CLICommand]'):
@@ -50,6 +51,7 @@ class CLI():
             ))
             
     def parse_args(self, argv: list[str]):
+        argcomplete.autocomplete(self.argparser)
         if len(argv) < 1:
             self.argparser.print_help()
             sys.exit()

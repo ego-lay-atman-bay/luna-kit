@@ -1,3 +1,5 @@
+# PYTHON_ARGCOMPLETE_OK
+
 import sys
 
 from .console import console
@@ -9,6 +11,7 @@ def main():
     
     cli = CLI(sys.argv)
     cli.parse_args(sys.argv[1:])
+
 
 if __name__ == "__main__":
     main()
