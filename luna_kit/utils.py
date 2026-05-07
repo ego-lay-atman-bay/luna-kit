@@ -7,8 +7,8 @@ if TYPE_CHECKING:
     import PIL.Image
 
 
-def posix_path(path):
-    result = pathlib.Path(path)
+def posix_path(path: str | pathlib.PurePath):
+    result = pathlib.PurePath(path)
     if not result.parts:
         return ''
     else:
