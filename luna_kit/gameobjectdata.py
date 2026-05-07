@@ -1,13 +1,15 @@
 import os
 import warnings
 from collections import UserDict
-from typing import IO, Literal, Any
+from typing import IO, Literal, Any, TypeVar
 
 from lxml import etree
 
 # from ._gameobjects import GameObject
 # from ._gameobjects.pony import PonyObject
 from .utils import strToBool, strToFloat, strToInt
+
+T = TypeVar('T')
 
 
 class GameObject(UserDict):
@@ -33,6 +35,9 @@ class GameObject(UserDict):
     
     def values(self):
         return self.data.values()
+    
+    def get(self, key: str, default: T = None) -> T:
+        return self.data.get(key, default)
 
 class ShopItemCategory(UserDict):
     def __init__(self, name: str, info: dict, items: 'dict[str, ShopItem] | None' = None):
