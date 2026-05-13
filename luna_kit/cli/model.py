@@ -53,4 +53,4 @@ class ModelCommand(CLICommand):
                 if material.name != material.properties.DiffuseTexture:
                     console.print(f'  Name: [green]{material.name}[/]')
                 
-                console.print(f'  Texture: [green]{material.properties.texture_name}[/]')
+                console.print(f'  Texture: [green]{material.properties.texture_name()}[/]')
