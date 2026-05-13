@@ -79,13 +79,32 @@ class ARKHeader:
     unknown: bytes = b''
 
     @property
-    def packed_size(self):
+    def packed_size(self) -> int:
+        """
+        Get the packed byte length of the header. The size depends on
+        the file version.
+
+        Raises:
+            BadARKFile: Unknown file version.
+
+        Returns:
+            int: The byte size of the header.
+        """
         if self.version not in _HEADER_STRUCTS:
             raise BadARKFile(f'Unknown file version {self.version}')
         
         return _HEADER_STRUCTS[self.version].__dataclass_struct__.size
 
     def pack(self):
+        """
+        Pack the header into bytes.
+
+        Raises:
+            BadARKFile: Unknown file version
+
+        Returns:
+            bytes: The packed header
+        """
         version_struct = _HEADER_STRUCTS.get(self.version)
         if not version_struct:
             raise BadARKFile(f'Unknown file version {self.version}')
@@ -108,6 +127,18 @@ class ARKHeader:
 
     @classmethod
     def unpack(cls, file: BinaryIO):
+        """
+        Read the header from a file
+
+        Args:
+            file (BinaryIO): Input binary file-like object
+
+        Raises:
+            BadARKFile: Unknown header version
+
+        Returns:
+            ARKHeader: The parsed header
+        """
         file.seek(8)
         version = struct.unpack('<I', file.read(4))[0]
         file.seek(-1, os.SEEK_END)
@@ -138,7 +169,13 @@ class ARKHeader:
             unknown = header.unknown if isinstance(header, _v3v4Header) else b'',
         )
     
-    def copy(self):
+    def copy(self) -> 'ARKHeader':
+        """
+        Create a copy of ARKHeader
+
+        Returns:
+            ARKHeader
+        """
         return ARKHeader(
             self.file_count,
             self.version,
@@ -198,11 +235,25 @@ class ARKMetadata:
     priority: int = 0
 
     @property
-    def full_path(self):
-        return pathlib.Path(self.pathname, self.filename).as_posix()
+    def full_path(self) -> str:
+        """The full path joining the pathname and filename"""
+        return pathlib.PurePath(self.pathname, self.filename).as_posix()
 
     @classmethod
-    def unpack(cls, file: BinaryIO, version: int):
+    def unpack(cls, file: BinaryIO, version: int) -> Self:
+        """
+        Read metadata from a file
+
+        Args:
+            file (BinaryIO): Input binary file-like object
+            version (int): Ark file version
+
+        Raises:
+            BadARKFile: Unknown file version
+
+        Returns:
+            ARKMetadata: Unpacked normalized metadata
+        """
         metadata_struct = _METADATA_STRUCTS.get(version, None)
         if not metadata_struct:
             raise BadARKFile(f'Unknown file version: {version}')
@@ -225,7 +276,19 @@ class ARKMetadata:
             priority = metadata.priority,
         )
     
-    def pack(self, version: int):
+    def pack(self, version: int) -> bytes:
+        """
+        Pack metadata into bytes
+
+        Args:
+            version (int): Ark file version
+
+        Raises:
+            BadARKFile: Unknown file version
+
+        Returns:
+            bytes: Packed metadata
+        """
         metadata_struct = _METADATA_STRUCTS.get(version, None)
         if not metadata_struct:
             raise BadARKFile(f'Unknown file version: {version}')
@@ -260,13 +323,31 @@ class ARKMetadata:
             raise BadARKFile(f'Unknown file version: {version}')
 
     
-    def packed_size(self, version: int):
+    def packed_size(self, version: int) -> int:
+        """
+        Get the packed size
+
+        Args:
+            version (int): Ark file version
+
+        Raises:
+            BadARKFile: Unknown file version
+
+        Returns:
+            int: Packed size
+        """
         if version not in _METADATA_STRUCTS:
             raise BadARKFile(f'Unknown file version: {version}')
         
         return _METADATA_STRUCTS[version].__dataclass_struct__.size
     
-    def copy(self):
+    def copy(self) -> 'ARKMetadata':
+        """
+        Return a copy of the ARKMetadata instance
+
+        Returns:
+            ARKMetadata
+        """
         return ARKMetadata(
             self.filename,
             self.pathname,
@@ -296,34 +377,40 @@ class ARKInfo:
     _dirty: bool = False
 
     @property
-    def filename(self):
+    def filename(self) -> str:
         return self._filename
     @property
-    def timestamp(self):
+    def timestamp(self) -> datetime | None:
         return self._timestamp
     @property
-    def compressed(self):
+    def compressed(self) -> bool:
         return self._compressed
     @property
-    def encrypted(self):
+    def encrypted(self) -> bool:
         return self._encrypted
     @property
-    def size(self):
+    def size(self) -> int:
         return self._size
     @property
-    def md5sum(self):
+    def md5sum(self) -> str:
         return self._md5sum.hex()
     @property
-    def priority(self):
+    def priority(self) -> int:
         return self._priority
     @property
-    def unknown1(self):
+    def unknown1(self) -> int:
         return self._unknown1
     @property
-    def unknown2(self):
+    def unknown2(self) -> bytes:
         return self._unknown2
     @property
-    def dirty(self):
+    def dirty(self) -> bool:
+        """
+        This signifies if this file has been edited
+
+        Returns:
+            bool
+        """
         return self._dirty
     
     
@@ -353,6 +440,79 @@ class ARK:
     __removed_files: list[str]
 
     def __init__(self, file: PathOrBinaryFile, mode: Literal['r', 'w', 'a'] = 'r'):
+        """
+        This is the main entry interacting with ark files. This class is also
+        a context manager, which handles opening and closing.
+
+        ```python
+        with ARK('test.ark') as ark:
+            print(ark.namelist())
+        ```
+
+        A very common operation is extracting, which can be easily be done
+
+        ```python
+        with ARK('test.ark') as ark:
+            ark.extract('data_ver.xml`, 'extracted/')
+        ```
+
+        You are also able to open files as binary file-like objects without
+        writing to a file
+
+        ```python
+        import xml.etree.ElementTree as ET
+
+        with ARK('test.ark') as ark:
+            with ark.open('data_ver.xml') as arkfile:
+                tree = ET.parse(arkfile)
+                root = tree.getroot()
+                print(f'version: {root.get("Value")}')
+        ```
+
+        Writing files is also easy
+
+        ```python
+        with ARK('test.ark', 'a') as ark:
+            with ark.open('test.txt', 'w') as arkfile:
+                arkfile.write(b'Hello world!')
+        ```
+
+        If the ark file is in write or append mode and you try to open a file
+        in the ark file that doesn't exist in write mode, it creates that file
+        inside the ark file.
+
+        If you wish to use ark files outside a context manager, it is still possible
+
+        ```python
+        ark = ARK('test.ark')
+        print(ark.namelist())
+        ark.close()
+        ```
+
+        It is important to call the `ARK.close()` method, as that closes the
+        underlying file. If you are in write mode, the `ARK.close()` will call
+        `ARK.save()`, which writes the ark file to disk.
+
+        ```python
+        ark = ARK('test.ark', 'a')
+        ark.write('test.txt') # Adds this file directly to the ark file
+        ark.save() # Unnecessary call because .close() calls this
+        ark.close()
+        ```
+
+        Modes:
+            r: Read-only mode.
+            w: Creates a brand new ark file and replaces whatever was in the input file.
+            a: Open the ark file in append mode, which keeps the contents of the ark file if it already exists.
+
+        Args:
+            file (PathOrBinaryFile): Input binary file. Must match the mode in the `mode` input.
+            mode (Literal['r', 'w', 'a'], optional): The mode to open the file in. Defaults to 'r'.
+
+        Raises:
+            ValueError: Unknown mode
+            BadArkFile: Bad ark file
+        """
         if mode not in ['r', 'w', 'a']:
             raise ValueError(f"Unknown mode: '{mode}'")
         
@@ -534,6 +694,60 @@ class ARK:
             self.__removed_files.remove(file.filename)
 
     def open(self, file: 'str | ARKInfo | ARKMetadata', mode: Literal['r', 'w', 'a'] = 'r') -> 'ARKFile':
+        """
+        Opens this file in the ark file in whatever mode is specified (always binary)
+
+        The returning `ARKFile` object is a file-like object that allows for
+        standard read/write operations (given you're in a mode that accepts it).
+        If you open a file in write/append mode and it doesn't exist, it will be
+        created.
+
+        ```python
+        with ARK('test.ark') as ark:
+            with ark.open('data_ver.xml', 'r') as arkfile:
+                print(arkfile.read())
+        
+        with ARK('test.ark', 'a') as ark:
+            with ark.open('data_ver.xml', 'w') as arkfile:
+                arkfile.write(b'<Version Value="11.2.0.0"/>')
+        ```
+
+        You don't need to use context managers, but you *must* close the `ARKFile`
+        before the `ARK` class is closed (or exiting the context manager), especially
+        if you are in write mode, otherwise the file will not be written to the ark file.
+
+        ```python
+        with ARK('test.ark') as ark:
+            arkfile = ark.open('data_ver.xml')
+            print(arkfile.read())
+            arkfile.close()
+
+        ark = ARK('test.ark', 'a')
+        arkfile = ark.open('data_ver.xml', 'w')
+        arkfile.write(b'<Version Value="11.2.0.0"/>')
+        arkfile.close() # Make sure the file is written to the ark file
+        ark.close()
+        ```
+
+        Modes:
+            r: Read-only mode.
+            w: Write mode. Will truncate if the file already exists.
+            a: Append mode, opens in edit mode without deleting any data.
+
+        Args:
+            file (str | ARKInfo | ARKMetadata): The file to open
+            mode (Literal[&#39;r&#39;, &#39;w&#39;, &#39;a&#39;], optional): The mode to open the file in. Defaults to 'r'.
+
+        Raises:
+            ValueError: Ark file is closed
+            ValueError: Invalid mode
+            ValueError: Cannot write to read-only ark file
+            ValueError: Filename can't be blank
+            FileNotFoundError: File does not exist (only triggers in read mode)
+
+        Returns:
+            ARKFile: Underlying file instance allowing for standard file-like object operations.
+        """
         if self.closed:
             raise ValueError('Ark file is closed')
         if mode not in ['r', 'w', 'a']:
@@ -591,6 +805,24 @@ class ARK:
         check_hash: bool = True,
         check_timestamp: bool = True,
     ):
+        """
+        Extract the file to `path`. `path` defaults to the current working
+        directory. By default it will also check if there is already an existing
+        file, and if there is, then it will check both the timestamp and checksum
+        before writing to the file. If the file to extract has a more recent timestamp,
+        then it will override the existing file, otherwise it will not do anything.
+
+        Note: this is the fastest way to extract a file.
+
+        Args:
+            file (str | ARKInfo | ARKMetadata): File to extract.
+            path (str | pathlib.Path | None, optional): Output folder. Defaults to the current working directory (`.`).
+            check_hash (bool, optional): Check existing file hash before writing. Defaults to True.
+            check_timestamp (bool, optional): Check existing file timestamp. Defaults to True.
+
+        Raises:
+            ValueError: Ark file is closed.
+        """
         if self.closed:
             raise ValueError('Ark file is closed')
     
@@ -633,7 +865,19 @@ class ARK:
                     timestamp = int(info.timestamp.timestamp())
                     os.utime(output, times = (timestamp, timestamp))
     
-    def read(self, file: 'str | ARKInfo | ARKMetadata'):
+    def read(self, file: 'str | ARKInfo | ARKMetadata') -> bytes:
+        """
+        Get the bytes for a file.
+
+        Args:
+            file (str | ARKInfo | ARKMetadata): File to read.
+
+        Raises:
+            ValueError: Ark file is closed
+
+        Returns:
+            bytes: File data
+        """
         if self.closed:
             raise ValueError('Ark file is closed')
         
@@ -648,6 +892,22 @@ class ARK:
         compressed: bool = True,
         encrypted: bool = False,
     ):
+        """
+        Write this file to the ark file named `arcname`. `arcname` defaults to
+        the base name of `filename` without any directory.
+
+        Args:
+            filename (str): Input file to write.
+            arcname (str | None, optional): Destination name. Defaults to None.
+            use_edit_time (bool, optional): Use the timestamp on the file. If `False`, it will use the current date. Defaults to True.
+            compressed (bool, optional): Compress this file. Defaults to True.
+            encrypted (bool, optional): Encrypt this file. Defaults to False.
+
+        Raises:
+            ValueError: Cannot write to closed file
+            ValueError: Cannot write in readonly mode
+
+        """
         if self.closed:
             raise ValueError('Cannot write to closed ark file')
         if not self.writable():
@@ -667,6 +927,17 @@ class ARK:
                 arkfile.encrypted = encrypted
     
     def remove(self, file: 'str | ARKInfo | ARKMetadata'):
+        """
+        Remove this file from the ark file.
+
+        Args:
+            file (str | ARKInfo | ARKMetadata): File to remove
+
+        Raises:
+            ValueError: Cannot write to closed file
+            ValueError: Cannot write in readonly mode
+            FileNotFoundError: File not found
+        """
         if self.closed:
             raise ValueError('Cannot write to closed ark file')
         if not self.writable():
@@ -688,6 +959,19 @@ class ARK:
         del self._info_collection[file]
 
     def getinfo(self, file: 'str | ARKInfo | ARKMetadata') -> ARKInfo:
+        """
+        Get the `ARKInfo` object for this file.
+
+        Args:
+            file (str | ARKInfo | ARKMetadata): File
+
+        Raises:
+            ValueError: Ark file is closed
+            FileNotFoundError: File not found
+
+        Returns:
+            ARKInfo: File info
+        """
         if self.closed:
             raise ValueError('Ark file is closed')
         
@@ -717,7 +1001,21 @@ class ARK:
                 raise FileNotFoundError(f'File with the name "{file}" does not exist')
             return info
     
-    def getmetadata(self, file: 'str | ARKInfo | ARKMetadata'):
+    def getmetadata(self, file: 'str | ARKInfo | ARKMetadata') -> 'ARKMetadata':
+        """
+        Get the `ARKMetadata` instance for this file. Unlike `ARKInfo`, this includes
+        the file location, compressed and encrypted sizes.
+
+        Args:
+            file (str | ARKInfo | ARKMetadata): File
+
+        Raises:
+            ValueError: Ark file is closed
+            FileNotFoundError: File not found
+
+        Returns:
+            ARKMetadata: File metadata
+        """
         if self.closed:
             raise ValueError('Ark file is closed')
 
@@ -749,12 +1047,30 @@ class ARK:
         )
 
     def infolist(self) -> list[ARKInfo]:
+        """
+        Get a list of `ARKInfo` objects for all files.
+
+        Raises:
+            ValueError: Ark file is closed
+
+        Returns:
+            list[ARKInfo]: Ark file info.
+        """
         if self.closed:
             raise ValueError('Ark file is closed')
         
         return list(self._info_collection.values())
     
-    def metadata_list(self):
+    def metadata_list(self) -> 'list[ARKMetadata]':
+        """
+        Get all the metadata for every file.
+
+        Raises:
+            ValueError: Ark file is closed
+
+        Returns:
+            list[ARKMetadata]: File metadata
+        """
         if self.closed:
             raise ValueError('Ark file is closed')
         
@@ -766,7 +1082,17 @@ class ARK:
         
         return list(self._info_collection.keys())
     
-    def testark(self):
+    def testark(self) -> list[str]:
+        """
+        Read every file and test against the hash. Any files that don't
+        match their hash will be returned.
+
+        Raises:
+            ValueError: Ark file is closed
+
+        Returns:
+            list[str]: Broken files
+        """
         if self.closed:
             raise ValueError('Ark file is closed')
         
@@ -778,11 +1104,26 @@ class ARK:
         
         return errors
     
-    def test(self):
+    def test(self) -> bool:
+        """
+        Test if there are any errors in the ark file, report True if there are none.
+        This will open every file and check against its hash.
+
+        Returns:
+            bool: Not broken
+        """
         return len(self.testark()) == 0
         
     
     def save(self):
+        """
+        Write the ark file to disk. This starts out by constructing a brand new
+        temporary ark file, then it copies it to the original file.
+
+        Raises:
+            ValueError: Ark file is closed
+            ValueError: Ark file is not writable
+        """
         if not self.__file_pointer:
             raise ValueError('File must be open')
         if not self.writable():
@@ -846,6 +1187,9 @@ class ARK:
         exc_val = None,
         exc_traceback = None,
     ):
+        """
+        Close this ark file, write if in write mode and there are any changes
+        """
         if self.__file_ctx:
             if self.writable() and self.dirty:
                 self.save()
@@ -855,14 +1199,26 @@ class ARK:
             self.__file_ctx = None
 
     @property
-    def dirty(self):
+    def dirty(self) -> bool:
+        """
+        Check if there are any changes present in this ark file.
+
+        Returns:
+            bool: There are changes that need to be written
+        """
         return len(self.__file_buffer) > 0 or len(self.__removed_files) > 0
 
     def writable(self) -> bool:
+        """
+        Check if this file is writable
+
+        Returns:
+            bool
+        """
         return self.__file_pointer is not None and self.mode in ['w', 'a']
     
     @property
-    def closed(self):
+    def closed(self) -> bool:
         return self.__file_pointer is None or self.__file_pointer.closed
 
     def __enter__(self):
@@ -938,22 +1294,32 @@ class ARKFile(io.BufferedIOBase):
         return self
     
     def readable(self) -> bool:
+        """
+        Return whether object was opened for reading.
+
+        If False, read() will raise io.UnsupportedOperation.
+        """
         return self._open
 
     def writable(self) -> bool:
+        """
+        Return whether object was opened for writing.
+
+        If False, write() will raise io.UnsupportedOperation.
+        """
         return self._open and self._ark.writable() and self._mode in ['w', 'a']
     
     def _check_open(self):
         if not self._open:
-            raise ValueError('Cannot read closed file')
+            raise ValueError('I/O operation on closed file.')
 
     def _check_readable(self):
         if not self.readable():
-            raise ValueError('File is not readable')
+            raise io.UnsupportedOperation("Not readable")
     
     def _check_writable(self):
         if not self.writable():
-            raise ValueError("Cannot write to file in readonly mode")
+            raise io.UnsupportedOperation("Not writable")
     
     def seek(self, offset: int, whence: int = os.SEEK_SET, /) -> int:
         self._check_open()
@@ -1027,7 +1393,19 @@ class ARKFile(io.BufferedIOBase):
             self.flush()
         self._open = False
     
-    def pack(self):
+    def pack(self) -> tuple[bytes, ARKMetadata]:
+        """
+        Write this file to the bytes to be used inside ark files.
+        This returns a tuple with the first value being the
+        compressed/encrypted bytes, and the second being the
+        `ARKMetadata` instance that includes metadata for the compression/encryption
+
+        Raises:
+            BadARKFile: Unknown file version
+
+        Returns:
+            tuple[bytes, ARKMetadata]: Final bytes and metadata.
+        """
         self.close()
         metadata = self._ark.getmetadata(self._info)
         result = self._buffer.getvalue()
@@ -1061,11 +1439,22 @@ class ARKFile(io.BufferedIOBase):
         self.close()
     
     @property
-    def filename(self):
+    def filename(self) -> str:
+        """
+        The filename of the file
+
+        Returns: str
+        """
+        self.compressed
         return self._info.filename
     
     @property
-    def compressed(self):
+    def compressed(self) -> bool:
+        """
+        Whether or not this file is compressed. Can be modified.
+
+        Returns: bool
+        """
         return self._info.compressed
     @compressed.setter
     def compressed(self, value: bool):
@@ -1074,7 +1463,12 @@ class ARKFile(io.BufferedIOBase):
         self._info._compressed = value
     
     @property
-    def encrypted(self):
+    def encrypted(self) -> bool:
+        """
+        Whether or not this file is encrypted. Can be modified.
+
+        Returns: bool
+        """
         return self._info.encrypted
     @encrypted.setter
     def encrypted(self, value: bool):
@@ -1083,7 +1477,12 @@ class ARKFile(io.BufferedIOBase):
         self._info._encrypted = value
     
     @property
-    def priority(self):
+    def priority(self) -> int:
+        """
+        The priority of this file. Can be modified.
+
+        Returns: int
+        """
         return self._info.priority
     @priority.setter
     def priority(self, value: int):
@@ -1092,7 +1491,12 @@ class ARKFile(io.BufferedIOBase):
         self._info._priority = value
     
     @property
-    def timestamp(self):
+    def timestamp(self) -> datetime | None:
+        """
+        The timestamp for this file. Can be modified.
+
+        Returns: datetime | None
+        """
         return self._info.timestamp
     @timestamp.setter
     def timestamp(self, value: datetime | None):
@@ -1101,18 +1505,26 @@ class ARKFile(io.BufferedIOBase):
         self._info._timestamp = value
 
     @property
-    def size(self):
+    def size(self) -> int:
+        """
+        Get the filesize
+
+        Returns:
+            int: File size
+        """
         pos = self._buffer.tell()
         self._buffer.seek(0, os.SEEK_END)
         size = self._buffer.tell()
         self._buffer.seek(pos)
         return size
     
-    def __len__(self):
+    def __len__(self) -> int:
+        """File size"""
         return self.size
     
     @property
-    def md5sum(self):
+    def md5sum(self) -> str:
+        """md5 checksum of this file"""
         return hashlib.md5(self._buffer.getvalue()).hexdigest()
 
 class ARKMetadataCollection:
