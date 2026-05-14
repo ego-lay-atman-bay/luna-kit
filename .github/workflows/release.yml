@@ -18,6 +18,8 @@ jobs:
   build:
     name: Build and upload artifacts
     runs-on: ubuntu-latest
+    environment:
+      name: pypi
     steps:
     - name: Checkout
       uses: actions/checkout@v6
@@ -37,6 +39,8 @@ jobs:
   publish:
     needs: build
     runs-on: ubuntu-latest
+    environment:
+      name: pypi
     permissions:
       # IMPORTANT: this permission is mandatory for trusted publishing
       id-token: write
@@ -55,6 +59,8 @@ jobs:
     name: Upload Release Asset
     needs: build
     runs-on: ubuntu-latest
+    environment:
+      name: pypi
 
     permissions:
       contents: write
