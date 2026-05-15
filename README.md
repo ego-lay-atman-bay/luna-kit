@@ -10,7 +10,7 @@ This is a toolkit that is used for reading files from the My Little Pony Magic P
 The easiest way to install and update luna kit, is by using [uv](https://docs.astral.sh/uv/). After you have uv installed, run this command to install Luna Kit.
 
 ```shell
-uv tool install 'luna-kit[cli]'
+uv tool install 'git+https://github.com/ego-lay-atman-bay/luna-kit[cli]'
 ```
 
 And then you can use `luna-kit` globally.
@@ -32,13 +32,13 @@ uv tool uninstall luna-kit
 If you need to install it through pip, just run this command.
 
 ```shell
-pip install luna-kit[cli]
+pip install luna-kit[cli]@git+https://github.com/ego-lay-atman-bay/luna-kit
 ```
 
 To update, run this command.
 
 ```shell
-pip install --upgrade luna-kit[cli]
+pip install --upgrade luna-kit[cli]@git+https://github.com/ego-lay-atman-bay/luna-kit --force
 ```
 
 And uninstalling
