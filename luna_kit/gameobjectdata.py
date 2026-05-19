@@ -1,12 +1,11 @@
-import os
-import warnings
 from collections import UserDict
-from typing import IO, Literal, Any, TypeVar
+import os
+from pathlib import Path
+from typing import Any, IO, Literal, TypeVar
+import warnings
 
 from lxml import etree
 
-# from ._gameobjects import GameObject
-# from ._gameobjects.pony import PonyObject
 from .utils import strToBool, strToFloat, strToInt
 
 T = TypeVar('T')
@@ -87,27 +86,24 @@ class ShopItem(UserDict):
 class GameObjectData(dict):
     def __init__(
         self,
-        file: str | IO,
-        shopdata: str | IO | None = None,
-        category_manifest: str | IO | None = None,
+        file: str | Path | IO,
+        shopdata: str | Path | IO | None = None,
+        category_manifest: str | Path | IO | None = None,
     ) -> None:
+        if isinstance(file, str):
+            file = Path(file)
+        
         game_data_xml = etree.parse(file).getroot()
         if category_manifest is None:
-            if isinstance(file, str):
-                category_manifest = os.path.join(
-                    os.path.dirname(file),
-                    'gameobjectcategorydata.xml',
-                )
+            if isinstance(file, Path):
+                category_manifest = file.parent/'gameobjectcategorydata.xml'
             else:
                 raise FileNotFoundError('Cannot find category manifest')
         
         
         if shopdata is None:
-            if isinstance(file, str):
-                shopdata = os.path.join(
-                    os.path.dirname(file),
-                    'shopdata.xml',
-                )
+            if isinstance(file, Path):
+                shopdata = file.parent/'shopdata.xml'
             else:
                 raise FileNotFoundError('Cannot find shopdata.xml')
         

@@ -1,6 +1,7 @@
 from typing import IO, BinaryIO, TextIO, TypeAlias, Any, overload, Literal
 import io
 from contextlib import nullcontext
+from pathlib import Path
 
 import os
 
@@ -35,8 +36,8 @@ def get_filesize(file: IO):
     file.seek(pos)
     return size
 
-PathOrBinaryFile: TypeAlias = str | bytes | bytearray | BinaryIO
-PathOrTextFile: TypeAlias = str | TextIO
+PathOrBinaryFile: TypeAlias = str | Path | bytes | bytearray | BinaryIO
+PathOrTextFile: TypeAlias = str | Path | TextIO
 PathOrFile: TypeAlias = PathOrBinaryFile | PathOrTextFile
 
 class BinaryReader():
@@ -59,9 +60,9 @@ def open_binary(file: PathOrBinaryFile, mode = 'r') -> nullcontext | BinaryIO:
     if 'b' not in mode:
         mode += 'b'
     
-    if 'r' in mode and isinstance(file, str) and os.path.isfile(file):
+    if 'r' in mode and isinstance(file, (str, Path)) and os.path.isfile(file):
         context_manager = open(file, mode)
-    elif ('w' in mode or 'a' in mode) and isinstance(file, str):
+    elif ('w' in mode or 'a' in mode) and isinstance(file, (str, Path)):
         context_manager = open(file, mode)
     elif isinstance(file, (bytes, bytearray)):
         context_manager = io.BytesIO(file)
@@ -88,9 +89,9 @@ def open_text_file(file: PathOrTextFile, mode = 'r') -> TextIO:
     Returns:
         BinaryIO: File-like object. Note: if a file-like object was passed in, `.__exit__()` will not do anything.
     """
-    if 'r' in mode and isinstance(file, str) and os.path.isfile(file):
+    if 'r' in mode and isinstance(file, (str, Path)) and os.path.isfile(file):
         context_manager = open(file, mode)
-    elif ('w' in mode or 'a' in mode) and isinstance(file, str):
+    elif ('w' in mode or 'a' in mode) and isinstance(file, (str, Path)):
         context_manager = open(file, mode)
     elif isinstance(file, str):
         context_manager = io.StringIO(file)

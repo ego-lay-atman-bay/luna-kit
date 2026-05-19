@@ -1,18 +1,19 @@
+from collections import UserDict
 import contextlib
 import io
 import json
 import os
+from pathlib import Path
 import struct
-from collections import UserDict
 from typing import BinaryIO
 
-from .file_utils import is_binary_file, is_text_file, PathOrBinaryFile, open_binary
+from .file_utils import PathOrBinaryFile, is_binary_file, is_text_file, open_binary
 
 
 class LOC(UserDict):
     data: dict[str, str]
     
-    def __init__(self, file: str | bytes | bytearray | BinaryIO = None) -> None:
+    def __init__(self, file: PathOrBinaryFile | None = None) -> None:
         super().__init__()
         
         self._string_count = 0
@@ -24,8 +25,8 @@ class LOC(UserDict):
 
     def read(self, file: PathOrBinaryFile):
         self.filename = ''
-        if isinstance(file, str):
-            self.filename = file
+        if isinstance(file, (str, Path)):
+            self.filename = str(file)
 
         self.data.clear()
         
