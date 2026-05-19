@@ -3,12 +3,16 @@ from functools import wraps
 import hashlib
 import io
 import os
-from typing import BinaryIO, Callable, Generator, Literal, TypedDict, overload
+from typing import BinaryIO, Callable, Generator, Literal, TypedDict, overload, TYPE_CHECKING
 import urllib
 import urllib.parse
 
 from .file_utils import PathOrBinaryFile, open_binary
 from .utils import strToInt
+from .typings import DLCManifest
+
+if TYPE_CHECKING:
+    from rich.console import Console
 
 try:
     import xxhash
@@ -58,10 +62,10 @@ class DataCenter(TypedDict):
 @dataclass
 class ClientID:
     game: Literal[1370] = 1370
-    client_p2: Literal[51627, 51679] = 51627
+    client_p2: Literal[51627, 51679, 85920] = 51627
     version: str = '10.2.0q'
-    platform: Literal['android', 'ios'] = 'android'
-    store: Literal['googleplay', 'appstore'] = 'googleplay'
+    platform: Literal['android', 'ios', 'windows'] = 'android'
+    store: Literal['googleplay', 'appstore', 'windows'] = 'googleplay'
     
     @classmethod
     def new(cls, *args, **kwargs):
@@ -84,12 +88,16 @@ class ClientID:
             return cls()
     
     @classmethod
-    def android(cls, version: str = '10.2.0q'):
+    def android(cls, version: str):
         return cls(1370, 51627, version, 'android', 'googleplay')
     
     @classmethod
-    def ios(cls, version: str = '10.2.0q'):
+    def ios(cls, version: str):
         return cls(1370, 51679, version, 'ios', 'appstore')
+
+    @classmethod
+    def windows(cls, version: str):
+        return cls(1370, 85920, version, 'windows', 'windows')
 
     def __str__(self):
         return f'{self.game}:{self.client_p2}:{self.version}:{self.platform}:{self.store}'
@@ -184,20 +192,18 @@ class Downloader:
 
         return chunk
     
-    def full_download(self, progress_bar = False) -> bytes | None:
+    def full_download(self, console: 'Console | None' = None) -> bytes | None:
+        
         if self.matches_hash:
-            if progress_bar:
-                from .console import console
-
+            if console:
                 console.print('[green]Already downloaded[/]')
             return None
         
         content = b''
         
-        if progress_bar:
+        if console:
             from rich.progress import Progress, TextColumn, BarColumn, DownloadColumn, TimeRemainingColumn
             from rich.table import Column
-            from .console import console
             
             with Progress(
                 TextColumn("{task.description}", table_column = Column(ratio = 1)),
@@ -431,17 +437,19 @@ class Session(requests.Session):
 class API:
     def __init__(
         self,
-        client_id: ClientID | str | Literal['android', 'ios'],
-        version: str | None = None,
+        client_id: ClientID | str | Literal['android', 'ios', 'windows'],
+        version: str,
         country: str = 'US',
         *,
         chunk_size: int | None = None,
     ) -> None:
-        if client_id in ['android', 'ios']:
+        if client_id in ['android', 'ios', 'windows']:
             if client_id == 'android':
-                client_id = ClientID.android()
+                client_id = ClientID.android(version)
+            elif client_id == 'ios':
+                client_id = ClientID.ios(version)
             else:
-                client_id = ClientID.ios()
+                client_id = ClientID.windows(version)
         else:
             client_id = ClientID.new(client_id)
         
@@ -459,13 +467,13 @@ class API:
     def client_id(self):
         return self.session.client_id
     
-    def get_dlc_manifest(self):
+    def get_dlc_manifest(self) -> DLCManifest:
         url = self.session.get_service('asset')/'assets'/str(self.client_id)/'dlc_manifest'
         response = self.session.get(url)
         response.raise_for_status()
         return response.json()
         
-    def get_astc_dlc_manifest(self):
+    def get_astc_dlc_manifest(self) -> DLCManifest:
         url = self.session.get_service('asset')/'assets'/str(self.client_id)/'astc_dlc_manifest'
         response = self.session.get(url)
         response.raise_for_status()

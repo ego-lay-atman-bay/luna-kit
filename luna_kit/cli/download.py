@@ -1,5 +1,24 @@
 from ..console import console
 from .cli import CLI, CLICommand
+from typing import overload
+
+
+class Version:
+    major: int
+    minor: int
+    patch: int
+    letter: str
+
+    @overload
+    def __init__(self, major: int, minor: int, patch: int, letter: str) -> None: ...
+    @overload
+    def __init__(self, version: str) -> None: ...
+    def __init__(self, *args, **kwargs) -> None:
+        if len(args) == 1 or 'version' in kwargs:
+            pass
+
+    def __str__(self) -> str:
+        return f'{self.major}.{self.minor}.{self.patch}{self.letter}'
 
 
 @CLI.register_command
@@ -20,7 +39,7 @@ class DownloadCommand(CLICommand):
         parser.add_argument(
             '-p', '--platform',
             dest = 'platform',
-            choices = ['android', 'ios'],
+            choices = ['android', 'ios', 'windows'],
             help = 'Platform to download the arkf iles for',
             default = 'android',
         )
@@ -28,8 +47,8 @@ class DownloadCommand(CLICommand):
         parser.add_argument(
             '-v', '--version',
             dest = 'version',
-            default = '10.2.0q',
             help = 'version to download the ark files for',
+            required = True,
         )
         
         parser.add_argument(
@@ -89,6 +108,12 @@ class DownloadCommand(CLICommand):
             action = 'store_true',
             help = 'Only print files that would be downloaded',
         )
+
+        parser.add_argument(
+            '--chunk-size',
+            dest = 'chunk_size',
+            type = int,
+        )
         
     
     @classmethod
@@ -111,6 +136,7 @@ class DownloadCommand(CLICommand):
         api = API(
             args.platform,
             args.version,
+            
         )
         
         downloaded = []
@@ -153,7 +179,7 @@ class DownloadCommand(CLICommand):
                             asset_hash = file.get('asset_hash'),
                         ) as downloader:
                             downloader.response.raise_for_status()
-                            downloader.full_download(True)
+                            downloader.full_download(console)
                     except HTTPError:
                         console.print('failed to download')
         
@@ -182,6 +208,14 @@ class DownloadCommand(CLICommand):
             #     '000_ios_startup_common.ark',
             # ])
             pass
+        elif api.client_id.platform == 'windows':
+            app_files.extend([
+                '000_win_bundled.ark',
+                '000_win_bundled_common.ark',
+                '000_win_bundled_veryhigh.ark',
+                '000_win_startup.ark',
+                '000_win_startup_common.ark',
+            ])
         
         for file in app_files:
             console.print(f'downloading [yellow]{file}[/]')
@@ -197,7 +231,7 @@ class DownloadCommand(CLICommand):
                         stream = True,
                     ) as downloader:
                         downloader.response.raise_for_status()
-                        downloader.full_download(True)
+                        downloader.full_download(console)
                 except HTTPError:
                     console.print('[red]download failed[/]')
         
