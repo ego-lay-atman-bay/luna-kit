@@ -173,6 +173,32 @@ class PVR:
                         "raw",
                         ('BGRA'),
                     )
+                case 7:
+                    decoded_bytes = texture2ddecoder.decode_bc1(
+                        self.image_data,
+                        self.header.width,
+                        self.header.height,
+                    )
+                    image = Image.frombytes(
+                        "RGBA",
+                        (self.header.width, self.header.height),
+                        decoded_bytes,
+                        "raw",
+                        ('BGRA'),
+                    )
+                case 11:
+                    decoded_bytes = texture2ddecoder.decode_bc3(
+                        self.image_data,
+                        self.header.width,
+                        self.header.height,
+                    )
+                    image = Image.frombytes(
+                        "RGBA",
+                        (self.header.width, self.header.height),
+                        decoded_bytes,
+                        "raw",
+                        ('BGRA'),
+                    )
                 case 23:
                     decoded_bytes = texture2ddecoder.decode_etc2a8(
                         self.image_data,
