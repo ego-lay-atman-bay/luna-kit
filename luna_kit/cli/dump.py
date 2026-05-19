@@ -312,8 +312,11 @@ class DumpCommand(CLICommand):
                 output = f'{os.path.splitext(pvr_file)[0]}.{args.pvr_format}'
                 if os.path.exists(output):
                     continue
-                pvr = PVR(pvr_file, external_alpha = True)
-                pvr.save(output)
-                globals()
+                try:
+                    pvr = PVR(pvr_file, external_alpha = True)
+                    pvr.save(output)
+                except Exception as e:
+                    e.add_note(f'file: {pvr_file}')
+                    raise e
 
         console.print('Finished!')
