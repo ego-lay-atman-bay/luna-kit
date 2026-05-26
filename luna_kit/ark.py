@@ -846,17 +846,10 @@ class ARK:
         path = os.path.abspath(path)
         output = os.path.join(path, name)
 
-        if name.endswith('cutiemark_celestia.alpha.pvr'):
-            console.print('cutiemark_celestia.alpha.pvr')
-        if name.endswith('cutiemark_celestia.pvr'):
-            console.print('cutiemark_celestia.pvr')
-
         extract = True
         if os.path.exists(output):
             if check_timestamp and info.timestamp:
                 existing_timestamp = os.path.getatime(output)
-                if name.endswith('cutiemark_celestia.alpha.pvr') or name.endswith('cutiemark_celestia.pvr'):
-                    console.print('timestamps', info.timestamp, existing_timestamp)
                 if info.timestamp.timestamp() < existing_timestamp:
                     extract = False
 
@@ -864,8 +857,6 @@ class ARK:
                 if check_hash:
                     with open(output, 'rb') as diskfile:
                         existing_hash = hashlib.md5(diskfile.read()).digest()
-                        if name.endswith('cutiemark_celestia.alpha.pvr') or name.endswith('cutiemark_celestia.pvr'):
-                            console.print('hashes', info._md5sum, existing_hash)
                         if existing_hash == info._md5sum:
                             extract = False
 
