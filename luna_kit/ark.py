@@ -1,4 +1,4 @@
-from collections.abc import Buffer, Iterable
+from collections.abc import Iterable
 from contextlib import nullcontext
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -26,10 +26,16 @@ import zlib
 from .file_utils import PathOrBinaryFile, open_binary
 from .utils import posix_path, read_ascii_string
 
+# Buffer was added in python 3.12 and I'm keeping support for 3.11
+if TYPE_CHECKING and sys.version_info >= (3,12):
+    from collections.abc import Buffer
+
 try:
     import dataclasses_struct as dcs
     import zstandard
     from . import xxtea
+    from .console import console
+
 except ImportError as e:
     e.add_note('ark dependencies could not be found')
     raise e
@@ -47,7 +53,7 @@ class DataclassStructProtocol:
         def pack(self) -> bytes: ...
 
         @classmethod
-        def from_packed(cls, data: Buffer) -> Self: ...
+        def from_packed(cls, data: 'Buffer') -> Self: ...
 
 
 @dcs.dataclass_struct(size = 'std', byteorder='little')
@@ -840,10 +846,17 @@ class ARK:
         path = os.path.abspath(path)
         output = os.path.join(path, name)
 
+        if name.endswith('cutiemark_celestia.alpha.pvr'):
+            console.print('cutiemark_celestia.alpha.pvr')
+        if name.endswith('cutiemark_celestia.pvr'):
+            console.print('cutiemark_celestia.pvr')
+
         extract = True
         if os.path.exists(output):
             if check_timestamp and info.timestamp:
                 existing_timestamp = os.path.getatime(output)
+                if name.endswith('cutiemark_celestia.alpha.pvr') or name.endswith('cutiemark_celestia.pvr'):
+                    console.print('timestamps', info.timestamp, existing_timestamp)
                 if info.timestamp.timestamp() < existing_timestamp:
                     extract = False
 
@@ -851,6 +864,8 @@ class ARK:
                 if check_hash:
                     with open(output, 'rb') as diskfile:
                         existing_hash = hashlib.md5(diskfile.read()).digest()
+                        if name.endswith('cutiemark_celestia.alpha.pvr') or name.endswith('cutiemark_celestia.pvr'):
+                            console.print('hashes', info._md5sum, existing_hash)
                         if existing_hash == info._md5sum:
                             extract = False
 
@@ -1344,12 +1359,12 @@ class ARKFile(io.BufferedIOBase):
         self._check_readable()
         return self._buffer.readlines(size)
     
-    def write(self, buffer: Buffer, /) -> int:
+    def write(self, buffer: 'Buffer', /) -> int:
         self._check_open()
         self._check_writable()
         return self._buffer.write(buffer)
 
-    def writelines(self, lines: Iterable[Buffer], /) -> None:
+    def writelines(self, lines: Iterable['Buffer'], /) -> None:
         self._check_open()
         self._check_writable()
         return self._buffer.writelines(lines)
