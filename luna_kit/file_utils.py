@@ -1,9 +1,9 @@
-from typing import IO, BinaryIO, TextIO, TypeAlias, Any, overload, Literal
-import io
 from contextlib import nullcontext
-from pathlib import Path
-
+import io
 import os
+from pathlib import Path
+from typing import BinaryIO, Callable, IO, Literal, TextIO, TypeAlias
+
 
 def is_eof(file: IO):
     char = b'' if is_binary_file(file) else ''
@@ -40,10 +40,17 @@ PathOrBinaryFile: TypeAlias = str | Path | bytes | bytearray | BinaryIO
 PathOrTextFile: TypeAlias = str | Path | TextIO
 PathOrFile: TypeAlias = PathOrBinaryFile | PathOrTextFile
 
-class BinaryReader():
-    pass
 
-def open_binary(file: PathOrBinaryFile, mode = 'r') -> nullcontext | BinaryIO:
+def open_binary(
+    file: PathOrBinaryFile,
+    mode: str = 'r',
+    buffering: Literal[-1, 1] = -1,
+    encoding: None = None,
+    errors: None = None,
+    newline: None = None,
+    closefd: bool = True,
+    opener: Callable[[str, int], int] | None = None
+) -> nullcontext | BinaryIO:
     """Open binary file
 
     Args:
@@ -61,9 +68,27 @@ def open_binary(file: PathOrBinaryFile, mode = 'r') -> nullcontext | BinaryIO:
         mode += 'b'
     
     if 'r' in mode and isinstance(file, (str, Path)) and os.path.isfile(file):
-        context_manager = open(file, mode)
+        context_manager = open(
+            file,
+            mode,
+            buffering = buffering,
+            encoding = encoding,
+            errors = errors,
+            newline = newline,
+            closefd = closefd,
+            opener = opener,
+        )
     elif ('w' in mode or 'a' in mode) and isinstance(file, (str, Path)):
-        context_manager = open(file, mode)
+        context_manager = open(
+            file,
+            mode,
+            buffering = buffering,
+            encoding = encoding,
+            errors = errors,
+            newline = newline,
+            closefd = closefd,
+            opener = opener,
+        )
     elif isinstance(file, (bytes, bytearray)):
         context_manager = io.BytesIO(file)
     elif is_binary_file(file):
@@ -75,7 +100,16 @@ def open_binary(file: PathOrBinaryFile, mode = 'r') -> nullcontext | BinaryIO:
     
     return context_manager
 
-def open_text_file(file: PathOrTextFile, mode = 'r') -> TextIO:
+def open_text_file(
+    file: PathOrTextFile,
+    mode: str = 'r',
+    buffering: int = -1,
+    encoding: str | None = None,
+    errors: str | None = None,
+    newline: str | None = None,
+    closefd: bool = True,
+    opener: Callable[[str, int], int] | None = None
+) -> nullcontext | TextIO:
     """Open text file
 
     Args:
@@ -90,13 +124,31 @@ def open_text_file(file: PathOrTextFile, mode = 'r') -> TextIO:
         BinaryIO: File-like object. Note: if a file-like object was passed in, `.__exit__()` will not do anything.
     """
     if 'r' in mode and isinstance(file, (str, Path)) and os.path.isfile(file):
-        context_manager = open(file, mode)
+        context_manager = open(
+            file,
+            mode,
+            buffering = buffering,
+            encoding = encoding,
+            errors = errors,
+            newline = newline,
+            closefd = closefd,
+            opener = opener,
+        )
     elif ('w' in mode or 'a' in mode) and isinstance(file, (str, Path)):
-        context_manager = open(file, mode)
+        context_manager = open(
+            file,
+            mode,
+            buffering = buffering,
+            encoding = encoding,
+            errors = errors,
+            newline = newline,
+            closefd = closefd,
+            opener = opener,
+        )
     elif isinstance(file, str):
-        context_manager = io.StringIO(file)
+        context_manager = io.StringIO(file, newline = newline)
     elif is_text_file(file):
-        context_manager = nullcontext(file)
+        context_manager = nullcontext[TextIO](file)
     elif is_binary_file(file):
         raise TypeError('file must be open in text mode')
     else:

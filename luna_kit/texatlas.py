@@ -6,7 +6,7 @@ import pathlib
 
 from PIL import Image
 
-from .file_utils import is_binary_file, is_text_file, PathOrFile
+from .file_utils import is_binary_file, is_text_file, PathOrFile, PathOrTextFile, open_text_file
 from .utils import posix_path, strToInt
 from .pvr import PVR
 
@@ -14,24 +14,17 @@ from .pvr import PVR
 class TexAtlas():
     def __init__(
         self,
-        file: PathOrFile,
+        file: PathOrTextFile,
         search_folders: list[str] | None = None,
         smart_search: bool = True,
     ) -> None:
         self.filename = ''
         self.images = []
         
-        if isinstance(file, str) and os.path.isfile(file):
-            self.filename = file
-            context_manager = open(file, 'r', newline = '')
-        elif isinstance(file, (bytes, bytearray)):
-            context_manager = io.BytesIO(file)
-        elif isinstance(file, io.IOBase):
-            context_manager = contextlib.nullcontext(file)
-        else:
-            context_manager = file
+        if isinstance(file, (str, pathlib.Path)) and os.path.isfile(file):
+            self.filename = str(file)
         
-        with context_manager as csvfile:
+        with open_text_file(file, 'r', newline = '') as csvfile:
             self.image_info = list({
                     **line,
                     'x': strToInt(line.get('x', 0)),
