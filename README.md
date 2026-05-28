@@ -186,6 +186,18 @@ You can also output csv files
 luna-kit loc "english.loc" --format csv
 ```
 
+## `.swf` files
+
+Luna Kit provides a `swf2webp` command to easily convert swf files to animated webp files. This command is made specifically for the animated avatars, so don't expect anything else to work.
+
+Before you run the command, you need to first install both [ffmpeg](https://ffmpeg.org/) and [JPEX](https://github.com/jindrapetrik/jpexs-decompiler).
+
+Ffmpeg can be installed normally, but must be available on the PATH. However JPEX is a little different. If installing it normally doesn't add `ffdec` to the PATH, then you need to download the zip, specifically look for **"ZIP (Windows, Linux, Mac OS)"** in the github releases. Then unzip it and either add the folder to the PATH, or provide `--ffdec path/to/ffdec.jar` in the command.
+
+```shell
+luna-kit swf2webp pa_495702.swf pa_495702.webp --ffdec path/to/ffdex.jar
+```
+
 ## Development
 
 If you are writing a script that uses luna kit, it is important to know all the optional dependencies (the text in brackets at the end of the installation requirement, like `luna-kit[cli]`). Multiple can also be specified `luna-kit[ark,xml,pvr,rk]`.

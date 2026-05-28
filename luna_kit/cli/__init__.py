@@ -9,4 +9,5 @@ from . import pvr
 from . import download
 from . import model
 from . import audio
+from . import swf2webp
 from .cli import CLI
