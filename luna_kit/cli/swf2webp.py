@@ -37,4 +37,4 @@ class SwfCommand(CLICommand):
                 console.print('Cannot find ffdec. Please either add it to the PATH or provide --ffdec ffdec.jar.\n\nYou can download ffdec from https://github.com/jindrapetrik/jpexs-decompiler/releases/latest')
                 return
 
-        swf2webp(args.input, args.output, ffdec, console = console)
+        swf2webp(args.input, args.output, ffdec_path = ffdec, console = console)
