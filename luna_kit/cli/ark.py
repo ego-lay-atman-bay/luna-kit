@@ -32,6 +32,13 @@ class ARKParser(CLICommand):
             action = GlobFiles,
         )
 
+        list_.add_argument(
+            '-f', '--filter', '--files',
+            dest = 'filter',
+            nargs = '+',
+            help = 'Only list these files. Can be glob pattern.'
+        )
+
         extract = subcommand.add_parser(
             'extract',
             help = 'Extract ark files',
@@ -107,9 +114,17 @@ class ARKParser(CLICommand):
         if args.action == 'list':
             files: list[str] = args.files
             for filename in files:
-                console.print(f'[yellow]{os.path.basename(filename)}[/]')
+                ark_name_printed = False
                 with ARK(filename) as ark:
                     for info in ark.infolist():
+                        if isinstance(args.filter, list) and not any(fnmatch.fnmatch(info.filename, pattern) for pattern in args.filter):
+                            continue
+
+                        # Don't show ark name if there's no files to list
+                        if not ark_name_printed:
+                            console.print(f'[yellow]{os.path.basename(filename)}[/]')
+                            ark_name_printed = True
+
                         print(info.filename, info.timestamp)
         
         elif args.action == 'extract':
