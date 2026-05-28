@@ -231,6 +231,9 @@ class DumpCommand(CLICommand):
                             writer = csv.writer(csvfile)
                             writer.writerow(['key', 'string'])
                             writer.writerows(loc.items())
+                
+                timestamp = os.path.getmtime(loc_filename)
+                os.utime(loc_output, (timestamp, timestamp))
             
         if args.json:
             console.print('Formatting json files')
@@ -242,6 +245,7 @@ class DumpCommand(CLICommand):
                 transient = True,
             ):
                 encoding = charset_normalizer.from_path(json_filename).best().encoding
+                timestamp = os.path.getmtime(json_filename)
 
                 with open(json_filename, 'r+', encoding = encoding) as file:
                     data = json.load(file)
@@ -253,6 +257,8 @@ class DumpCommand(CLICommand):
                         indent = None if args.json_indent == 0 else args.json_indent,
                         ensure_ascii = False,
                     )
+                
+                os.utime(json_filename, (timestamp, timestamp))
         
         if args.xml:
             console.print('Formatting xml file')
@@ -264,6 +270,7 @@ class DumpCommand(CLICommand):
                 transient = True,
             ):
                 root, encoding = parse_xml(xml_filename, with_encoding = True)
+                timestamp = os.path.getmtime(xml_filename)
                 with open(xml_filename, 'wb') as file:
                     file.write(tostring(
                         root,
@@ -271,6 +278,8 @@ class DumpCommand(CLICommand):
                         encoding = encoding,
                         pretty_print = True,
                     ))
+                
+                os.utime(xml_filename, (timestamp, timestamp))
     
         if args.atlas:
             console.print('Splitting texatlas files')
@@ -281,6 +290,7 @@ class DumpCommand(CLICommand):
                 files_progress = progress.add_task('Splitting...', total = len(atlas_files))
 
                 for atlas_folder, atlas_filename in atlas_files:
+                    timestamp = os.path.getmtime(atlas_filename)
                     atlas = TexAtlas(atlas_filename)
                     progress.update(
                         atlas_progress,
@@ -293,7 +303,8 @@ class DumpCommand(CLICommand):
                         if not os.path.exists(image_filename):
                             os.makedirs(os.path.dirname(image_filename), exist_ok = True)
                             image.image.save(image_filename)
-                        
+                            os.utime(image_filename, (timestamp, timestamp))
+
                         progress.update(atlas_progress, advance = 1)
                     progress.update(files_progress, advance = 1)
 
@@ -315,8 +326,13 @@ class DumpCommand(CLICommand):
                 try:
                     pvr = PVR(pvr_file, external_alpha = True)
                     pvr.save(output)
+                    timestamp = os.path.getmtime(pvr_file)
+                    os.utime(output, (timestamp, timestamp))
+
                 except Exception as e:
                     e.add_note(f'file: {pvr_file}')
                     raise e
+                
+
 
         console.print('Finished!')
