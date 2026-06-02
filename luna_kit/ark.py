@@ -849,7 +849,7 @@ class ARK:
         extract = True
         if os.path.exists(output):
             if check_timestamp and info.timestamp:
-                existing_timestamp = os.path.getatime(output)
+                existing_timestamp = os.path.getmtime(output)
                 if info.timestamp.timestamp() < existing_timestamp:
                     extract = False
 
@@ -867,7 +867,7 @@ class ARK:
                     # shutil.copyfileobj(arkfile, diskfile)
                     diskfile.write(arkfile.getbuffer())
                 
-                if info.timestamp:
+                if info.timestamp is not None:
                     timestamp = int(info.timestamp.timestamp())
                     os.utime(output, times = (timestamp, timestamp))
     
