@@ -3,13 +3,22 @@ from functools import wraps
 import hashlib
 import io
 import os
-from typing import BinaryIO, Callable, Generator, Literal, TypedDict, overload, TYPE_CHECKING
+from pathlib import Path
+from typing import (
+    BinaryIO,
+    Callable,
+    Generator,
+    Literal,
+    TYPE_CHECKING,
+    TypedDict,
+    overload,
+)
 import urllib
 import urllib.parse
 
 from .file_utils import PathOrBinaryFile, open_binary
-from .utils import strToInt
 from .typings import DLCManifest
+from .utils import strToInt
 
 if TYPE_CHECKING:
     from rich.console import Console
@@ -129,7 +138,7 @@ class Downloader:
     def __enter__(self):
         self.matches_hash = False
         self.response.raise_for_status()
-        if isinstance(self._file, str) and not os.path.exists(self._file):
+        if isinstance(self._file, (str, Path)) and not os.path.exists(self._file):
             self._open_file = None
             self.file = None
         else:
@@ -182,7 +191,7 @@ class Downloader:
             raise StopIteration
         
         chunk = next(self._iter)
-        if self.file is None and isinstance(self._file, str) and not os.path.exists(self._file):
+        if self.file is None and isinstance(self._file, (str, Path)) and not os.path.exists(self._file):
             os.makedirs(os.path.dirname(os.path.abspath(self._file)), exist_ok = True)
             self._open_file = open_binary(self._file, 'w')
             self.file = self._open_file.__enter__()
@@ -506,7 +515,7 @@ class API:
         url = self.session.get_service('asset')/'assets'/str(self.client_id)/asset
         
         if not stream:
-            if isinstance(file, str) and asset_hash and os.path.exists(file):
+            if isinstance(file, (str, Path)) and asset_hash and os.path.exists(file):
                 if xxh32_file(file) == asset_hash:
                     return None
 

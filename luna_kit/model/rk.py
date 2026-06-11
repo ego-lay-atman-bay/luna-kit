@@ -527,7 +527,11 @@ class RKM:
             elif field.type is bool:
                 setattr(self, attr, strToBool(getattr(self, attr)))
     
+
+
     def texture_name(self, suffix: str = ''):
+        extensions = ['tga', 'pvr', 'png']
+        
         extension = 'png' if self.NoCompress else 'pvr'
 
         if os.path.isfile(os.path.join(self.dir, (name := f'{self.DiffuseTexture}{suffix}.{extension}'))):

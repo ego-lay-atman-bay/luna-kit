@@ -487,18 +487,18 @@ class FortuneShopDataType(TypedDict):
         'discount',
         'regular',
         'super',
-    ], int]]
-    item_price_chances: NotRequired[dict[Literal[
+    ], float]]
+    item_price_chances: dict[Literal[
         'regular',
         'discount',
         'super',
         'ultra',
-    ], int]]
+    ], float]
     item_rarity_chances: dict[Literal[
         'common',
         'uncommon',
         'rare',
-    ], int]
+    ], float]
     required_level: int
     item_lists: dict[Literal[
         'common',
