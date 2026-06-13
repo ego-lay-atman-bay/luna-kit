@@ -1,7 +1,11 @@
 import os
+from pathlib import Path
 import struct
-import warnings
 from typing import Annotated, BinaryIO
+import warnings
+
+from .file_utils import PathOrBinaryFile, open_binary
+from .utils import image_has_alpha, put_alpha
 
 try:
     import dataclasses_struct as dcs
@@ -11,8 +15,7 @@ except ImportError as e:
     e.add_note('pvr dependencies not found')
     raise e
 
-from .file_utils import PathOrBinaryFile, open_binary
-from .utils import put_alpha, image_has_alpha
+
 
 
 @dcs.dataclass_struct(size = 'std', byteorder='little')
@@ -77,7 +80,7 @@ class PVR:
     def read(self, file: PathOrBinaryFile):
         self.header = Header()
         self.filename = ''
-        self.alpha_filename: str = ''
+        self.alpha_filename = ''
         self.metadata_header = MetadataHeader()
         self.metadata = {}
         self.metadata_block = b''
@@ -85,8 +88,8 @@ class PVR:
         self.image = None
         
         with open_binary(file) as open_file:
-            if isinstance(file, str):
-                self.filename = file
+            if isinstance(file, (str, Path)):
+                self.filename = str(file)
                 if self.external_alpha:
                     split_filename = os.path.splitext(file)
                     alpha_filename = f'{split_filename[0]}.alpha{split_filename[1]}'
@@ -97,9 +100,11 @@ class PVR:
             self._read_metadata(open_file)
             self.image = self._read_image(open_file)
         
+        print(f'alpha: {self.alpha_filename}')
         if self.alpha_filename and not image_has_alpha(self.image):
             alpha = PVR(self.alpha_filename)
             if alpha.image.size == self.image.size:
+                print('Same size')
                 self.image = put_alpha(self.image, alpha.image)
     
     def _read_header(self, file: BinaryIO):
