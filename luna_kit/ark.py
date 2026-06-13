@@ -850,7 +850,7 @@ class ARK:
         if os.path.exists(output):
             if check_timestamp and info.timestamp:
                 existing_timestamp = os.path.getmtime(output)
-                if info.timestamp.timestamp() < existing_timestamp:
+                if info.timestamp.timestamp() <= existing_timestamp:
                     extract = False
 
             if extract and check_hash:
