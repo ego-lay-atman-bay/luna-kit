@@ -122,8 +122,8 @@ class LOC(UserDict):
         file.write(encoded)
 
     def translate(self, key: str):
-        data = {key.strip(): value for key, value in self.data.items()}
-        return data.get(key.strip(), key)
+        data = {key.strip().upper(): value for key, value in self.data.items()}
+        return data.get(key.strip().upper(), key)
     
     @property
     def language(self):
