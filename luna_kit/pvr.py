@@ -100,11 +100,11 @@ class PVR:
             self._read_metadata(open_file)
             self.image = self._read_image(open_file)
         
-        print(f'alpha: {self.alpha_filename}')
+        # print(f'alpha: {self.alpha_filename}')
         if self.alpha_filename and not image_has_alpha(self.image):
             alpha = PVR(self.alpha_filename)
             if alpha.image.size == self.image.size:
-                print('Same size')
+                # print('Same size')
                 self.image = put_alpha(self.image, alpha.image)
     
     def _read_header(self, file: BinaryIO):
