@@ -146,7 +146,7 @@ class DownloadCommand(CLICommand):
         else:
             version = Version.parse(raw_version)
         
-        if args.platform == 'android' and not args.force and version > latest_version:
+        if not args.force and version > latest_version:
             console.print('[red]Could not find version[/]')
             return
         
