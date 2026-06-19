@@ -1,24 +1,7 @@
 from ..console import console
 from .cli import CLI, CLICommand
 from typing import overload
-
-
-class Version:
-    major: int
-    minor: int
-    patch: int
-    letter: str
-
-    @overload
-    def __init__(self, major: int, minor: int, patch: int, letter: str) -> None: ...
-    @overload
-    def __init__(self, version: str) -> None: ...
-    def __init__(self, *args, **kwargs) -> None:
-        if len(args) == 1 or 'version' in kwargs:
-            pass
-
-    def __str__(self) -> str:
-        return f'{self.major}.{self.minor}.{self.patch}{self.letter}'
+import argparse
 
 
 @CLI.register_command
@@ -48,7 +31,7 @@ class DownloadCommand(CLICommand):
             '-v', '--version',
             dest = 'version',
             help = 'version to download the ark files for',
-            required = True,
+            default = 'latest',
         )
         
         parser.add_argument(
@@ -63,6 +46,13 @@ class DownloadCommand(CLICommand):
             dest = 'dlc_manifest',
             action = 'store_true',
             help = 'Download from dlc_manifest',
+        )
+
+        parser.add_argument(
+            '--force',
+            dest = 'force',
+            help = argparse.SUPPRESS,
+            action = 'store_true',
         )
         
         # parser.add_argument(
@@ -119,8 +109,10 @@ class DownloadCommand(CLICommand):
     @classmethod
     def run_command(cls, args):
         import os
-        from ..api import API
+        from ..api import API, Version, get_latest_version, DLCManifest
+        import requests
         from requests import HTTPError
+        import json
         
         if not args.astc_manifest and not args.dlc_manifest:
             if args.platform == 'android':
@@ -132,19 +124,43 @@ class DownloadCommand(CLICommand):
             'ark': 'ark',
             'arkdiff': 'arkdiff',
         }
+
+        latest_version: Version | None = None
+
+        raw_latest_version = get_latest_version()
+        if raw_latest_version is not None:
+            latest_version = Version.parse(raw_latest_version)
+        else:
+            response = requests.get('https://assets.all-the-ponies.com/game_version.json')
+            if response.ok:
+                latest_version = Version.parse(response.json()['game_version'])
+
+        if latest_version is None:
+            console.print('[red]Could not find version[/]')
+            return
+
+        raw_version: str = args.version
+
+        if raw_version == 'latest':
+            version = latest_version
+        else:
+            version = Version.parse(raw_version)
+        
+        if args.platform == 'android' and not args.force and version > latest_version:
+            console.print('[red]Could not find version[/]')
+            return
         
         api = API(
             args.platform,
-            args.version,
-            
+            version,
         )
         
         downloaded = []
-        output = os.path.abspath(args.output)
+        output: str = os.path.abspath(args.output)
+        output = output.format(version = version)
         
-        def download_files(manifest: dict):
+        def download_files(manifest: DLCManifest):
             for file in manifest.get('dlc_items', []):
-                file: dict
                 filename: str = file.get('filename')
                 
                 if filename in downloaded:
@@ -183,19 +199,26 @@ class DownloadCommand(CLICommand):
                     except HTTPError:
                         console.print('failed to download')
         
+        astc_manifest: DLCManifest | None = None
+        manifest: DLCManifest | None = None
+        
         if args.astc_manifest:
             try:
                 astc_manifest = api.get_astc_dlc_manifest()
                 download_files(astc_manifest)
             except HTTPError:
-                console.print('Faled to download astc_dlc_manifest')
+                pass
         
         if args.dlc_manifest:
             try:
                 manifest = api.get_dlc_manifest()
                 download_files(manifest)
             except HTTPError:
-                console.print('Faled to download dlc_manifest')
+                pass
+        
+        if manifest is astc_manifest is None:
+            console.print('[red]Could not find version[/]')
+            return
         
         app_files = []
         

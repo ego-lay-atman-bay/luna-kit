@@ -1,8 +1,10 @@
+from copy import copy
 from dataclasses import dataclass
 from functools import wraps
 import hashlib
 import io
 import os
+import re
 from pathlib import Path
 from typing import (
     BinaryIO,
@@ -27,9 +29,12 @@ try:
     import xxhash
     from furl import furl
     import requests
+    import google_play_scraper as gplay
 except:
     raise ImportError('api dependencies could not be found')
 
+PACKAGE_NAME = "com.gameloft.android.ANMP.GloftPOHM"
+VERSION_PATTERN = re.compile(r'^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)(?P<letter>[a-zA-Z]+)$')
 ASSET_HASH_SEED = 0x004D4C50
 
 def xxh32_file(file: PathOrBinaryFile, seed: int = ASSET_HASH_SEED) -> str:
@@ -61,6 +66,76 @@ def xxh32_file(file: PathOrBinaryFile, seed: int = ASSET_HASH_SEED) -> str:
     return hasher.hexdigest().upper()
 
 
+def get_latest_version() -> str | None:
+    try:
+        return gplay.app(PACKAGE_NAME).get('version')
+    except:
+        return None
+
+
+@dataclass
+class Version:
+    major: int
+    minor: int
+    patch: int
+    letter: str
+
+    @classmethod
+    def parse(cls, version: 'str | Version'):
+        if isinstance(version, Version):
+            return copy(version)
+
+        version_match = re.search(VERSION_PATTERN, version)
+        if version_match is None:
+            raise ValueError(f'Could not parse version {version}')
+
+        version_dict = version_match.groupdict()
+
+        return cls(
+            int(version_dict['major']),
+            int(version_dict['minor']),
+            int(version_dict['patch']),
+            version_dict['letter'],
+        )
+    
+    def __str__(self) -> str:
+        return f'{self.major}.{self.minor}.{self.patch}{self.letter}'
+    
+    def __lt__(self, other: str | Version) -> bool:
+        if not isinstance(other, (str, Version)):
+            return NotImplemented
+        
+        other = Version.parse(other)
+
+        if self.major != other.major:
+            return self.major < other.major
+        elif self.minor != other.minor:
+            return self.minor < other.minor
+        elif self.patch != other.patch:
+            return self.patch < other.patch
+        elif self.letter != other.letter:
+            return self.letter < other.letter
+        
+        return False
+    
+    def __eq__(self, other: str | Version, /) -> bool:
+        if not isinstance(other, (str, Version)):
+            return NotImplemented
+        
+        other = Version.parse(other) # sanity check
+
+        return str(self) == str(other)
+        
+
+    def __le__(self, other: str | Version):
+        if not isinstance(other, (str, Version)):
+            return NotImplemented
+        
+        other = Version.parse(other)
+
+        return self == other or self < other
+
+
 class DataCenter(TypedDict):
     name: str
     status: Literal['status']
@@ -72,7 +147,7 @@ class DataCenter(TypedDict):
 class ClientID:
     game: Literal[1370] = 1370
     client_p2: Literal[51627, 51679, 85920] = 51627
-    version: str = '10.2.0q'
+    version: Version | None = None
     platform: Literal['android', 'ios', 'windows'] = 'android'
     store: Literal['googleplay', 'appstore', 'windows'] = 'googleplay'
     
@@ -83,7 +158,7 @@ class ClientID:
                 return cls(
                     game = args[0].game,
                     client_p2 = args[0].client_p2,
-                    version = args[0].version,
+                    version = copy(args[0].version),
                     platform = args[0].platform,
                     store = args[0].store,
                 )
@@ -97,18 +172,21 @@ class ClientID:
             return cls()
     
     @classmethod
-    def android(cls, version: str):
-        return cls(1370, 51627, version, 'android', 'googleplay')
+    def android(cls, version: str | Version):
+        return cls(1370, 51627, Version.parse(version), 'android', 'googleplay')
     
     @classmethod
-    def ios(cls, version: str):
-        return cls(1370, 51679, version, 'ios', 'appstore')
+    def ios(cls, version: str | Version):
+        return cls(1370, 51679, Version.parse(version), 'ios', 'appstore')
 
     @classmethod
-    def windows(cls, version: str):
-        return cls(1370, 85920, version, 'windows', 'windows')
+    def windows(cls, version: str | Version):
+        return cls(1370, 85920, Version.parse(version), 'windows', 'windows')
 
     def __str__(self):
+        if self.version is None:
+            raise TypeError('No version supplied')
+        
         return f'{self.game}:{self.client_p2}:{self.version}:{self.platform}:{self.store}'
     
     def urlencode(self):
@@ -447,7 +525,7 @@ class API:
     def __init__(
         self,
         client_id: ClientID | str | Literal['android', 'ios', 'windows'],
-        version: str,
+        version: str | Version,
         country: str = 'US',
         *,
         chunk_size: int | None = None,
@@ -463,7 +541,7 @@ class API:
             client_id = ClientID.new(client_id)
         
         if version is not None:
-            client_id.version = version
+            client_id.version = Version.parse(version)
             
         self.session = Session(
             client_id,
@@ -478,13 +556,13 @@ class API:
     
     def get_dlc_manifest(self) -> DLCManifest:
         url = self.session.get_service('asset')/'assets'/str(self.client_id)/'dlc_manifest'
-        response = self.session.get(url)
+        response = self.session.get(str(url))
         response.raise_for_status()
         return response.json()
         
     def get_astc_dlc_manifest(self) -> DLCManifest:
         url = self.session.get_service('asset')/'assets'/str(self.client_id)/'astc_dlc_manifest'
-        response = self.session.get(url)
+        response = self.session.get(str(url))
         response.raise_for_status()
         return response.json()
         

@@ -78,6 +78,7 @@ download = [
   "requests",
   "furl",
   "xxhash",
+  "google-play-scraper@git+https://github.com/ego-lay-atman-bay/google-play-scraper",
 ]
 
 cli = [
@@ -105,6 +106,7 @@ cli = [
   "requests",
   "furl",
   "xxhash",
+  "google-play-scraper@git+https://github.com/ego-lay-atman-bay/google-play-scraper",
 ]
 
 all = [
@@ -131,6 +133,7 @@ all = [
   "requests",
   "furl",
   "xxhash",
+  "google-play-scraper@git+https://github.com/ego-lay-atman-bay/google-play-scraper",
 ]
 
 [project.urls]
