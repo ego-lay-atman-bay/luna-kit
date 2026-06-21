@@ -197,6 +197,9 @@ class GameObjectData(dict):
                     # if parameter_xml is None:
                     #     if not parameter_info['optional'] and not parameter_info['exclude']:
                     #         warnings.warn(f'parameter {parameter_name} on {object_id} in category {category_name} is not optional')
+
+                    if parameter_xml is None and parameter_info['optional']:
+                        continue
                         
                     parameter_data = {}
                     
@@ -290,8 +293,6 @@ class GameObjectData(dict):
                 category[item_id] = item
                         
     def _parse_game_value(self, value: str, type: Literal['string', 'stringWithDefault', 'int', 'float', 'bool']):
-        if value is None:
-            return None
         match type:
             case 'bool':
                 return strToBool(value)
@@ -301,6 +302,8 @@ class GameObjectData(dict):
                 return strToFloat(value)
             case 'string' | 'stringWithDefault':
                 return str(value)
+            case _:
+                return value
 
     def get_object(self, id: str) -> GameObject | None:
         for objects in self.values():
