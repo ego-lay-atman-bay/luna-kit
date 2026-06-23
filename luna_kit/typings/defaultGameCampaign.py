@@ -1,4 +1,4 @@
-from typing import TypedDict, Literal, Optional, NotRequired, Required, Mapping
+from typing import TypedDict, Literal, Optional, NotRequired, Required, Mapping, Annotated
 
 __all__ = ['DefaultGameCampaignType']
 
@@ -592,6 +592,40 @@ class GlobalDefines(TypedDict):
     SubscribeData: GlobalDefines_SubscribeData
     energy_cap: int
 
+class PonyPartType(TypedDict):
+    SkipPrice: NotRequired[int]
+    ApplyPrice: int
+    Ingredients: Annotated[list[int], 5]
+    PurchasePrice: int
+    ApplyTime: NotRequired[int]
+
+class PonyTasksOverride(TypedDict):
+    Chance: float
+    Amount: int
+    RarityStr: Literal['low', 'mid' 'high', 'premium', '100percent']
+
+class QuestSpecialItem(TypedDict):
+    Chance: float
+    PonyTasksOverride: NotRequired[dict[str, PonyTasksOverride]]
+    RarityStr: Literal['low', 'mid' 'high', 'premium', '100percent']
+
+class GameObjectDataType(TypedDict):
+    TapableContainer: dict[str, dict[Literal['Enabled'], bool]]
+    PonyPart: dict[str, PonyPartType]
+    QuestSpecialItem: dict[str, QuestSpecialItem]
+    PonySet: dict[str, dict[Literal['Enabled'], bool]]
+
+
+class PonyTaskData(TypedDict, total = False):
+    RewardCoins: int
+    DropsMegaEventScore: int
+    SkipCost: int
+    RewardXp: int
+    Duration: int
+    DropsBossFightPoints: int
+    ID: Required[str]
+    RewardGems: int
+
 
 # DefaultGameCampaign
 class DefaultGameCampaignType(TypedDict):
@@ -620,9 +654,9 @@ class DefaultGameCampaignType(TypedDict):
     item_fuse: dict
     group_quests: GroupQuests
     ReferralRewards: dict
-    game_object_data: dict
+    game_object_data: GameObjectDataType
     events: dict
-    PonyTaskData: dict
+    PonyTaskData: list[PonyTaskData]
     SpinningWheel: dict
     LotteryWheel: dict
     BluePrints: dict
