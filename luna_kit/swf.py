@@ -133,6 +133,7 @@ def replace_image_tags(
 def export_swf_frames(swf_path: str | Path, output: str | Path, *, ffdec_path: str | Path = 'ffdec'):
     return run_ffdec([
         '-format', 'frame:png',
+        '-ignorebackground',
         '-export', 'frame', str(output), str(swf_path),
     ], ffdec_path)
 
