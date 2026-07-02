@@ -143,6 +143,7 @@ class DownloadCommand(CLICommand):
 
         if raw_version == 'latest':
             version = latest_version
+            console.print(f'Found version [cyan]{latest_version}[/]')
         else:
             version = Version.parse(raw_version)
         

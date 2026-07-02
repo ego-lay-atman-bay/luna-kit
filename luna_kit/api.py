@@ -68,9 +68,21 @@ def xxh32_file(file: PathOrBinaryFile, seed: int = ASSET_HASH_SEED) -> str:
 
 def get_latest_version() -> str | None:
     try:
-        return gplay.app(PACKAGE_NAME).get('version')
-    except:
-        return None
+        response = requests.post(
+            "https://www.apkmirror.com/wp-json/apkm/v1/app_exists?pnames=com.gameloft.android.ANMP.GloftPOHM",
+            headers = {
+                "User-Agent": "APKUpdater-v3.0.3",
+                # This is a key from APKUpdater https://github.com/rumboalla/apkupdater/issues/58#issuecomment-309238684
+                "Authorization": "Basic YXBpLWFwa3VwZGF0ZXI6cm01cmNmcnVVakt5MDRzTXB5TVBKWFc4"
+            }
+        )
+        response.raise_for_status()
+
+        raw_app_info = response.json()
+        return raw_app_info['data'][0]['release']['version']
+    except requests.HTTPError:
+        app_info = gplay.app(PACKAGE_NAME)
+        return app_info['version']
 
 
 @dataclass
