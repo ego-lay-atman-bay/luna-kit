@@ -68,15 +68,16 @@ You can get the `.ark` files from your android device (in `/Android/data/com.gam
 To download `.ark` files use the `download` command.
 
 ```shell
-luna-kit download --version 10.4.1a -o "ark files/"
+luna-kit download -o "ark files/"
 ```
 
-Make sure to set the `--version` argument to the version you want to download.
+This will automatically download the latest version, but you can also specify `--version ...` to download a specific version.
 
 By default it will only download the same ones that the android game downloads (in addition to the one in the apk), however you can specify some arguments to change which files it downloads.
 
 Options with `{}` are the defaults.
 
+- `-v, --version {laset}`
 - `-c, --calibre [low,high,{veryhigh},all] ...` 
 - `-t, --tag [{mlpextra,mlpdata,mlpextragui,mlpextra2,softdlc},video] ...`
 - `-f, --files [all,{ark},arkdiff,other] ...`
@@ -87,13 +88,13 @@ Options with `{}` are the defaults.
 So to download every single file, run
 
 ```shell
-luna-kit download --version 10.4.1a -o "ark files/" -d -a -c all -f all
+luna-kit download -o "ark files/" -d -a -c all -f all
 ```
 
 You can also specify the platform between `android` and `ios` (it defaults to `android`). You can download every single ark file, including the one in the apk from the server, however you can't download the ark files in the ipa for ios (which have everything except the `softdlc` ark files).
 
 ```shell
-luna-kit download --version 10.4.1a -p ios -o "ark files/"
+luna-kit download -p ios -o "ark files/"
 ```
 
 ## Dumping `.ark` files
