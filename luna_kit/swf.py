@@ -1,11 +1,12 @@
+from glob import glob
 import json
 import os
+from pathlib import Path
 import shutil
 import subprocess
 import tempfile
 from typing import TYPE_CHECKING
 import xml.etree.ElementTree as ET
-from pathlib import Path
 
 from .pvr import PVR
 
@@ -177,6 +178,12 @@ def fix_swf(input_swf: str | Path, output_swf: str | Path, *, ffdec_path: str | 
                 if os.path.exists(original_path + extension):
                     break
             
+            if not os.path.exists(original_path + extension):
+                glob_path = Path(os.path.dirname(input_swf)).glob(image_name + '.*', case_sensitive = False)
+                for found in glob_path:
+                    if found.suffix in ['.pvr', '.png', '.tga']:
+                        original_path, extension = os.path.splitext(found)
+            
             if extension == '.pvr':
                 image = PVR(original_path + extension)
                 image.save(new_path)
@@ -222,6 +229,12 @@ def swf2webp(swf_path: str | Path, webp_path: str | Path, *, ffdec_path: str | P
             for extension in ['.tga', '.pvr', '.png']:
                 if os.path.exists(original_path + extension):
                     break
+            
+            if not os.path.exists(original_path + extension):
+                glob_path = Path(os.path.dirname(input_swf)).glob(image_name + '.*', case_sensitive = False)
+                for found in glob_path:
+                    if found.suffix in ['.pvr', '.png', '.tga']:
+                        original_path, extension = os.path.splitext(found)
             
             if extension == '.pvr':
                 image = PVR(original_path + extension)
