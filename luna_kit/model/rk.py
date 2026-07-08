@@ -571,7 +571,7 @@ class Bone:
     matrix_3x4: numpy.ndarray
     matrix_4x4: numpy.ndarray
     matrix_buffer: bytes
-    parentName: str | None = None,
+    parentName: str | None = None
     parentIndex: int = -1
     
     # def decompose_bone_matrix(self):
