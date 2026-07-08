@@ -307,9 +307,12 @@ class GameObjectData(dict):
 
     def get_object(self, id: str) -> GameObject | None:
         for objects in self.values():
-            if id in objects:
-                return objects[id]
+            obj = objects.get(id)
+            if obj is not None:
+                return obj
+    
     def get_object_shopdata(self, id: str) -> ShopItem | None:
         for objects in self.shopdata.values():
-            if id in objects:
-                return objects[id]
+            obj = objects.get(id)
+            if obj is not None:
+                return obj
