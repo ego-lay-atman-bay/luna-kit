@@ -12,9 +12,11 @@ from .file_utils import PathOrBinaryFile, is_binary_file, is_text_file, open_bin
 
 class LOC(UserDict):
     data: dict[str, str]
+    _normalized_data: dict[str, str]
     
     def __init__(self, file: PathOrBinaryFile | None = None) -> None:
         super().__init__()
+        self._normalized_data = {}
         
         self._string_count = 0
         self.filename = ''
@@ -29,6 +31,7 @@ class LOC(UserDict):
             self.filename = str(file)
 
         self.data.clear()
+        self._normalized_data.clear()
         
         with open_binary(file, 'r') as open_file:
             self.__read_header(open_file)
@@ -37,6 +40,8 @@ class LOC(UserDict):
                 key = self.__read_key(open_file)
                 value = self.__read_value(open_file)
                 self.data[key] = value
+                self._normalized_data[key.strip().upper()] = value
+
     
     def write(self, file: PathOrBinaryFile):
         """
@@ -122,8 +127,7 @@ class LOC(UserDict):
         file.write(encoded)
 
     def translate(self, key: str):
-        data = {key.strip().upper(): value for key, value in self.data.items()}
-        return data.get(key.strip().upper(), key)
+        return self._normalized_data.get(key.strip().upper(), key)
     
     @property
     def language(self):
@@ -141,6 +145,27 @@ class LOC(UserDict):
     
     def items(self):
         return self.data.items()
+    
+    def __setitem__(self, key: str, value: str) -> None:
+        super().__setitem__(key, value)
+        self._normalized_data[key.strip().upper()] = value
+
+    def __delitem__(self, key: str) -> None:
+        super().__delitem__(key)
+        normalized_key = key.strip().upper()
+        if normalized_key in self._normalized_data:
+            del self._normalized_data[normalized_key]
+
+    def update(self, *args, **kwargs):
+        super().update(*args, **kwargs)
+        self._rebuild_normalized_data()
+
+    def clear(self):
+        super().clear()
+        self._normalized_data.clear()
+    
+    def _rebuild_normalized_data(self):
+        self._normalized_data = {key.strip().upper(): value for key, value in self.data.items()}
     
     def __repr__(self):
         return f'<{self.__class__.__name__} language={repr(self.language)} string_count={repr(self.string_count)}>'
