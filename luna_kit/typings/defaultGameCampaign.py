@@ -325,6 +325,23 @@ class MiniGames(TypedDict):
     newcamer_calendar: NewcomerCalendar
     ponybookminigame: dict[Literal['swap_cost_gem'], int]
 
+# Maze data
+
+class MazePonyPriceSlot(TypedDict):
+    currency: int
+    price: int
+    id: str
+
+class MazeChestItem(TypedDict):
+    min: int
+    max: int
+    id: str
+    weight: float
+
+class MazeData(TypedDict):
+    MazePonyPrice: dict[str, dict[str, list[MazePonyPriceSlot]]]
+    ChestRewards: dict[str, list[MazeChestItem]]
+
 # group quests
 
 class GroupQuests_ChestLootItem(TypedDict):
@@ -651,6 +668,7 @@ class DefaultGameCampaignType(TypedDict):
     init: dict
     VIP: dict
     Redeem: dict
+    MazeData: NotRequired[MazeData]
     item_fuse: dict
     group_quests: GroupQuests
     ReferralRewards: dict
