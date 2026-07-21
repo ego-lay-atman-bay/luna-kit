@@ -225,7 +225,8 @@ class _v5MetadataStruct(DataclassStructProtocol):
     unknown2: Annotated[bytes, 40]
     md5sum: Annotated[bytes, 16]
     priority: dcs.U32
-    unknown3: Annotated[bytes, 20]
+    unknown3: dcs.U32
+    unknown4: Annotated[bytes, 16]
 
 
 _METADATA_STRUCTS: dict[int, Type[_v1v3MetadataStruct | _v4MetadataStruct | _v5MetadataStruct]] = {
@@ -247,7 +248,8 @@ class ARKMetadata:
     timestamp: int = 0
     unknown1: int = 0
     unknown2: bytes = b''
-    unknown3: bytes = b''
+    unknown3: int = 0
+    unknown4: bytes = b''
     md5sum: bytes = b''
     priority: int = 0
 
@@ -289,7 +291,8 @@ class ARKMetadata:
             timestamp = metadata.timestamp,
             unknown1 = metadata.unknown1 if isinstance(metadata, (_v4MetadataStruct, _v5MetadataStruct)) else 0,
             unknown2 = metadata.unknown2 if isinstance(metadata, (_v4MetadataStruct, _v5MetadataStruct)) else b'',
-            unknown3 = metadata.unknown3 if isinstance(metadata, _v5MetadataStruct) else b'',
+            unknown3 = metadata.unknown3 if isinstance(metadata, _v5MetadataStruct) else 0,
+            unknown4 = metadata.unknown4 if isinstance(metadata, _v5MetadataStruct) else b'',
             md5sum = metadata.md5sum,
             priority = metadata.priority,
         )
@@ -349,8 +352,9 @@ class ARKMetadata:
                 timestamp = self.timestamp,
                 unknown1 = self.unknown1,
                 unknown2 = self.unknown2,
-                unknown3 = self.unknown2,
                 priority = self.priority,
+                unknown3 = self.unknown3,
+                unknown4 = self.unknown4,
             ).pack()
         else:
             raise BadARKFile(f'Unknown file version: {version}')
@@ -382,18 +386,19 @@ class ARKMetadata:
             ARKMetadata
         """
         return ARKMetadata(
-            self.filename,
-            self.pathname,
-            self.file_location,
-            self.original_filesize,
-            self.compressed_size,
-            self.encrypted_size,
-            self.timestamp,
-            self.unknown1,
-            self.unknown2,
-            self.unknown3,
-            self.md5sum,
-            self.priority,
+            filename = self.filename,
+            pathname = self.pathname,
+            file_location = self.file_location,
+            original_filesize = self.original_filesize,
+            compressed_size = self.compressed_size,
+            encrypted_size = self.encrypted_size,
+            timestamp = self.timestamp,
+            unknown1 = self.unknown1,
+            unknown2 = self.unknown2,
+            unknown3 = self.unknown3,
+            unknown4 = self.unknown4,
+            md5sum = self.md5sum,
+            priority = self.priority,
         )
 
 @dataclass
@@ -407,7 +412,8 @@ class ARKInfo:
     _priority: int = 0
     _unknown1: int = 0
     _unknown2: bytes = b''
-    _unknown3: bytes = b''
+    _unknown3: int = 0
+    _unknown4: bytes = b''
 
     _dirty: bool = False
 
@@ -439,8 +445,11 @@ class ARKInfo:
     def unknown2(self) -> bytes:
         return self._unknown2
     @property
-    def unknown3(self) -> bytes:
+    def unknown3(self) -> int:
         return self._unknown3
+    @property
+    def unknown4(self) -> bytes:
+        return self._unknown4
     @property
     def dirty(self) -> bool:
         """
@@ -634,8 +643,10 @@ class ARK:
                 compressed_size = metadata.compressed_size,
                 encrypted_size = metadata.encrypted_size,
                 timestamp = metadata.timestamp,
-                unknown1 = metadata.unknown1 if isinstance(metadata, _v4MetadataStruct) else 0,
-                unknown2 = metadata.unknown2 if isinstance(metadata, _v4MetadataStruct) else b'',
+                unknown1 = metadata.unknown1 if isinstance(metadata, (_v4MetadataStruct, _v5MetadataStruct)) else 0,
+                unknown2 = metadata.unknown2 if isinstance(metadata, (_v4MetadataStruct, _v5MetadataStruct)) else b'',
+                unknown3 = metadata.unknown3 if isinstance(metadata, _v5MetadataStruct) else 0,
+                unknown4 = metadata.unknown4 if isinstance(metadata, _v5MetadataStruct) else b'',
                 md5sum = metadata.md5sum,
                 priority = metadata.priority,
             ))
@@ -1056,6 +1067,8 @@ class ARK:
                 _priority = metadata.priority,
                 _unknown1 = metadata.unknown1,
                 _unknown2 = metadata.unknown2,
+                _unknown3 = metadata.unknown3,
+                _unknown4 = metadata.unknown4,
             )
         else:
             info = self._info_collection.get(file)
@@ -1105,6 +1118,8 @@ class ARK:
             priority = file.priority,
             unknown1 = file.unknown1,
             unknown2 = file.unknown2,
+            unknown3 = file.unknown3,
+            unknown4 = file.unknown4,
             timestamp = timestamp,
         )
 
@@ -1292,6 +1307,9 @@ class ARK:
             exc_val = exc_val,
             exc_traceback = exc_traceback,
         )
+    
+    def __del__(self):
+        self.close()
 
 
 class ARKFile(io.BufferedIOBase):
