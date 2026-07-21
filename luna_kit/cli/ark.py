@@ -172,7 +172,7 @@ class ARKParser(CLICommand):
                                 e.add_note(f'filename: {filename}')
                                 errors += 1
                                 if args.ignore_errors:
-                                    console.print(e)
+                                    console.print(f'{filename}: {e}')
                                 else:
                                     raise e
                     
