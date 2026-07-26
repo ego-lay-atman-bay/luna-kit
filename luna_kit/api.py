@@ -113,7 +113,7 @@ class Version:
     def __str__(self) -> str:
         return f'{self.major}.{self.minor}.{self.patch}{self.letter}'
     
-    def __lt__(self, other: str | Version) -> bool:
+    def __lt__(self, other: 'str | Version') -> bool:
         if not isinstance(other, (str, Version)):
             return NotImplemented
         
@@ -130,7 +130,7 @@ class Version:
         
         return False
     
-    def __eq__(self, other: str | Version, /) -> bool:
+    def __eq__(self, other: 'str | Version', /) -> bool:
         if not isinstance(other, (str, Version)):
             return NotImplemented
         
@@ -139,7 +139,7 @@ class Version:
         return str(self) == str(other)
         
 
-    def __le__(self, other: str | Version):
+    def __le__(self, other: 'str | Version'):
         if not isinstance(other, (str, Version)):
             return NotImplemented
         
