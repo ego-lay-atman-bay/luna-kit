@@ -4,3 +4,4 @@ from .FusionData import FusionData
 from .PrizeTypes import PrizeTypes
 from .GroupQuests import GroupQuestsType
 from .PonyTasks import PonyTasksType
+from .ArenaQTESettings import ArenaQTESettingsType
