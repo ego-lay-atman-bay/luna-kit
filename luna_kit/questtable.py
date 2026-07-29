@@ -3,7 +3,7 @@ from collections import UserDict
 from dataclasses import dataclass
 import dataclasses
 import os
-from typing import Any, overload
+from typing import Any, overload, TypeVar
 
 from lxml import etree
 
@@ -287,28 +287,57 @@ class QuestCategory:
     tracking_id: int
     teaser_movie: str
 
+
+T = TypeVar('T')
+
 class QuestManager(UserDict):
     data: dict[str, QuestCategory]
     
     def __init__(self, filename: PathOrBinaryFile):
+        super().__init__()
+        
         quest_manager_xml = parse_xml(filename)[0]
 
-    def keys(self) -> dict_keys[str, QuestCategory]:
+        for category_xml in quest_manager_xml:
+            if category_xml.tag != 'QuestCategory':
+                continue
+
+            name = category_xml.attrib['Name']
+
+            self.data[name] = QuestCategory(
+                name = name,
+                loc_name = category_xml.attrib.get('LocName', ''),
+                default_giver = category_xml.attrib.get('DefaultGiver', ''),
+                active_limit = strToInt(category_xml.attrib.get('ActiveLimit', '0')),
+                time_limited = strToBool(category_xml.attrib.get('TimeLimited', '0')),
+                image = category_xml.attrib.get('Img', ''),
+                final_text = category_xml.attrib.get('FinalText', ''),
+                final_image = category_xml.attrib.get('FinalImage', ''),
+                building = category_xml.attrib.get('Building', ''),
+                outro_cinematic = category_xml.attrib.get('OutroCinematic', ''),
+                reward_icon = category_xml.attrib.get('RewardIcon', ''),
+                tracking_id = strToInt(category_xml.attrib.get('TrackingID', '0')),
+                teaser_movie = category_xml.attrib.get('TeaserMovie', ''),
+            )
+
+    def keys(self):
         return self.data.keys()
     
-    def values(self) -> dict_values[str, QuestCategory]:
+    def values(self):
         return self.data.values()
     
-    def items(self) -> dict_items[str, QuestCategory]:
+    def items(self):
         return self.data.items()
     
     def __getitem__(self, key: str) -> QuestCategory:
         return self.data.__getitem__(key)
     
     @overload
-    def get[T](self, key: str) -> QuestCategory | None: ...
+    def get(self, key: str, default: None = None) -> QuestCategory | None: ...
     @overload
-    def get[T](self, key: str, default: T | None = None) -> QuestCategory | T | None: ...
-    def get[T](self, key: str, default: T | None = None) -> QuestCategory | T | None:
+    def get(self, key: str, default: QuestCategory) -> QuestCategory: ...
+    @overload
+    def get(self, key: str, default: T) -> QuestCategory | T: ...
+    def get(self, key: str, default: T = None) -> QuestCategory | T:
         return self.data.get(key, default)
     
