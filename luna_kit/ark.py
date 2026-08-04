@@ -463,7 +463,7 @@ class ARKInfo:
         return result
 
 class ARK:
-    KEY = b'4*[=\x10\xff?\x92\xa4F\xe3\x00+\x90t\x0c'
+    XXTEA_KEY = b'4*[=\x10\xff?\x92\xa4F\xe3\x00+\x90t\x0c'
     AES_KEY = bytes.fromhex('7d24a71a82a2d62d49d3551d0c68cb062f7c7d0bdcc506260699ff26875d71f6')
     # KEY = [0x3d5b2a34, 0x923fff10, 0x00e346a4, 0x0c74902b]
     _decompressor = zstandard.ZstdDecompressor()
@@ -483,7 +483,7 @@ class ARK:
                 initial_value=int.from_bytes(self.header.unknown, 'big'),
             )
             return cipher.decrypt(data)
-        return xxtea.decrypt(data, self.KEY)
+        return xxtea.decrypt(data, self.XXTEA_KEY)
 
     def _encrypt_metadata(self, data: bytes) -> bytes:
         """Encrypt metadata bytes based on ARK version."""
@@ -499,7 +499,7 @@ class ARK:
                 initial_value=int.from_bytes(self.header.unknown, 'big'),
             )
             return cipher.encrypt(data)
-        return xxtea.encrypt(data, self.KEY)
+        return xxtea.encrypt(data, self.XXTEA_KEY)
 
     __file_ctx: nullcontext | BinaryIO | None
     __file_pointer: BinaryIO | None
@@ -743,7 +743,7 @@ class ARK:
                 cipher = _AES.new(self.AES_KEY, _AES.MODE_CTR, nonce=b'', initial_value=int.from_bytes(iv, 'big'))
                 file_data = cipher.decrypt(file_data)
             else:
-                file_data = xxtea.decrypt(file_data, self.KEY)
+                file_data = xxtea.decrypt(file_data, self.XXTEA_KEY)
         
         if file_info.compressed:
             if self.header.version == 1:
@@ -1505,7 +1505,7 @@ class ARKFile(io.BufferedIOBase):
         metadata.compressed_size = len(result)
 
         if self.encrypted:
-            result = xxtea.encrypt(result, self._ark.KEY)
+            result = xxtea.encrypt(result, self._ark.XXTEA_KEY)
             metadata.encrypted_size = len(result)
         
         return result, metadata
