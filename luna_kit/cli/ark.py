@@ -71,6 +71,13 @@ class ARKParser(CLICommand):
             help = 'Only extract these files. Can be glob pattern.'
         )
 
+        extract.add_argument(
+            '--force',
+            dest = 'force',
+            action = 'store_true',
+            help = "Always extract",
+        )
+
         create = subcommand.add_parser(
             'create',
             help = 'Create an ark file',
@@ -167,7 +174,12 @@ class ARKParser(CLICommand):
                             if isinstance(args.filter, list) and not any(fnmatch.fnmatch(filename, pattern) for pattern in args.filter):
                                 continue
                             try:
-                                ark.extract(filename, output)
+                                ark.extract(
+                                    filename,
+                                    output,
+                                    check_timestamp = not args.force,
+                                    check_hash = not args.force,
+                                )
                             except Exception as e:
                                 e.add_note(f'filename: {filename}')
                                 errors += 1
