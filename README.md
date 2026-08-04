@@ -226,5 +226,6 @@ There are also some `vxn` files, which are files that contain multiple audio str
 # Credits
 - I got the information about v1 ark files from [Pony3Ark](https://github.com/Arzaroth/Pon3Ark).
 - Most of the code to read v3 ark files is based off of [Celestia's ARK](https://gist.github.com/liamwhite/ba39ce769424b53a5505).
+- Thanks to a dataminer who wishes to remain anonymous for figuring out the v5 ark file format
 
 The major inspiration for creating this, was to eliminate the compilation step in Celestia's ARK, as well as providing an easy to use api. I called this "Luna Kit", because it's a toolkit for reading (and writing some) files inside My Little Pony Magic Princess, including `.ark` files, splitting `.texatlas` files, converting `.loc` files to json, etc.
