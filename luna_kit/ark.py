@@ -36,9 +36,22 @@ try:
     from . import xxtea
     from .console import console
 
+    try:
+        from Crypto.Cipher import AES as _AES
+        _HAS_AES = True
+    except ImportError:
+        _HAS_AES = False
+
 except ImportError as e:
     e.add_note('ark dependencies could not be found')
     raise e
+
+try:
+    from Crypto.Cipher import AES as _AES
+    _HAS_AES = True
+except ImportError:
+    _HAS_AES = False
+
 
 class BadARKFile(Exception):
     pass
@@ -74,6 +87,7 @@ _HEADER_STRUCTS: dict[int, Type[_v1Header | _v3v4Header]] = {
     1: _v1Header,
     3: _v3v4Header,
     4: _v3v4Header,
+    5: _v3v4Header,
 }
 
 @dataclass
@@ -160,7 +174,7 @@ class ARKHeader:
             header = _v1Header.from_packed(
                 file.read(_v1Header.__dataclass_struct__.size)
             )
-        elif version == 3 or version == 4:
+        elif version in [3, 4, 5]:
             header = _v3v4Header.from_packed(
                 file.read(_v3v4Header.__dataclass_struct__.size)
             )
@@ -218,11 +232,28 @@ class _v4MetadataStruct(DataclassStructProtocol):
     md5sum: Annotated[bytes, 16]
     priority: dcs.U32
 
+@dcs.dataclass_struct(size = 'std', byteorder='little')
+class _v5MetadataStruct(DataclassStructProtocol):
+    filename: Annotated[bytes, 128]
+    pathname: Annotated[bytes, 128]
+    file_location: dcs.U32
+    original_filesize: dcs.U32
+    compressed_size: dcs.U32
+    encrypted_size: dcs.U32
+    unknown_block1: Annotated[bytes, 16]
+    unknown_block2: Annotated[bytes, 16]
+    unknown_block3: Annotated[bytes, 16]
+    md5sum: Annotated[bytes, 8]
+    unknown_padding1: Annotated[bytes, 8]
+    priority: dcs.U32
+    unknown_padding2: Annotated[bytes, 20]
 
-_METADATA_STRUCTS: dict[int, Type[_v1v3MetadataStruct | _v4MetadataStruct]] = {
+
+_METADATA_STRUCTS: dict[int, Type[_v1v3MetadataStruct | _v4MetadataStruct | _v5MetadataStruct]] = {
     1: _v1v3MetadataStruct,
     3: _v1v3MetadataStruct,
     4: _v4MetadataStruct,
+    5: _v5MetadataStruct,
 }
 
 
@@ -275,10 +306,10 @@ class ARKMetadata:
             original_filesize = metadata.original_filesize,
             compressed_size = metadata.compressed_size,
             encrypted_size = metadata.encrypted_size,
-            timestamp = metadata.timestamp,
+            timestamp = struct.unpack('<I', metadata.unknown_block1[:4])[0] if isinstance(metadata, _v5MetadataStruct) else metadata.timestamp,
             unknown1 = metadata.unknown1 if isinstance(metadata, _v4MetadataStruct) else 0,
-            unknown2 = metadata.unknown2 if isinstance(metadata, _v4MetadataStruct) else b'',
-            md5sum = metadata.md5sum,
+            unknown2 = metadata.unknown2 if isinstance(metadata, _v4MetadataStruct) else (metadata.unknown_padding2 if isinstance(metadata, _v5MetadataStruct) else b''),
+            md5sum = metadata.md5sum if not isinstance(metadata, _v5MetadataStruct) else (metadata.md5sum + metadata.unknown_padding1),
             priority = metadata.priority,
         )
     
@@ -433,8 +464,42 @@ class ARKInfo:
 
 class ARK:
     KEY = b'4*[=\x10\xff?\x92\xa4F\xe3\x00+\x90t\x0c'
+    AES_KEY = bytes.fromhex('7d24a71a82a2d62d49d3551d0c68cb062f7c7d0bdcc506260699ff26875d71f6')
     # KEY = [0x3d5b2a34, 0x923fff10, 0x00e346a4, 0x0c74902b]
     _decompressor = zstandard.ZstdDecompressor()
+
+    def _decrypt_metadata(self, data: bytes) -> bytes:
+        """Decrypt metadata bytes based on ARK version."""
+        if self.header.version == 5:
+            if not _HAS_AES:
+                raise ImportError(
+                    'pycryptodome is required for v5 ARK files. '
+                    'Install with: pip install pycryptodome'
+                )
+            cipher = _AES.new(
+                self.AES_KEY,
+                _AES.MODE_CTR,
+                nonce=b'',
+                initial_value=int.from_bytes(self.header.unknown, 'big'),
+            )
+            return cipher.decrypt(data)
+        return xxtea.decrypt(data, self.KEY)
+
+    def _encrypt_metadata(self, data: bytes) -> bytes:
+        """Encrypt metadata bytes based on ARK version."""
+        if self.header.version == 5:
+            if not _HAS_AES:
+                raise ImportError(
+                    'pycryptodome is required for v5 ARK files.'
+                )
+            cipher = _AES.new(
+                self.AES_KEY,
+                _AES.MODE_CTR,
+                nonce=b'',
+                initial_value=int.from_bytes(self.header.unknown, 'big'),
+            )
+            return cipher.encrypt(data)
+        return xxtea.encrypt(data, self.KEY)
 
     __file_ctx: nullcontext | BinaryIO | None
     __file_pointer: BinaryIO | None
@@ -596,11 +661,11 @@ class ARK:
 
         self.encrypted_metadata = raw_metadata
 
-        raw_metadata = xxtea.decrypt(raw_metadata, self.KEY)
+        raw_metadata = self._decrypt_metadata(raw_metadata)
 
         self.compressed_metadata = raw_metadata
 
-        if self.header.version in [3,4]:
+        if self.header.version in [3,4,5]:
             raw_metadata = self._decompressor.decompress(raw_metadata, raw_metadata_size)
         
         if len(raw_metadata) != raw_metadata_size:
@@ -622,10 +687,10 @@ class ARK:
                 original_filesize = metadata.original_filesize,
                 compressed_size = metadata.compressed_size,
                 encrypted_size = metadata.encrypted_size,
-                timestamp = metadata.timestamp,
+                timestamp = struct.unpack('<I', metadata.unknown_block1[:4])[0] if isinstance(metadata, _v5MetadataStruct) else metadata.timestamp,
                 unknown1 = metadata.unknown1 if isinstance(metadata, _v4MetadataStruct) else 0,
-                unknown2 = metadata.unknown2 if isinstance(metadata, _v4MetadataStruct) else b'',
-                md5sum = metadata.md5sum,
+                unknown2 = metadata.unknown2 if isinstance(metadata, _v4MetadataStruct) else (metadata.unknown_padding2 if isinstance(metadata, _v5MetadataStruct) else b''),
+                md5sum = (metadata.md5sum + metadata.unknown_padding1) if isinstance(metadata, _v5MetadataStruct) else metadata.md5sum,
                 priority = metadata.priority,
             ), raw = True)
         
@@ -645,12 +710,12 @@ class ARK:
         if len(metadata_list) == 0:
             return data
         
-        if self.header.version in [3,4]:
+        if self.header.version in [3,4,5]:
             data = zstandard.compress(data, 12)
         
         self.compressed_metadata = data
 
-        data = xxtea.encrypt(data, self.KEY)
+        data = self._encrypt_metadata(data)
         self.encrypted_metadata = data
 
         return data
@@ -671,12 +736,19 @@ class ARK:
         file_data = self.__file_pointer.read(packed_size)
 
         if file_info.encrypted:
-            file_data = xxtea.decrypt(file_data, self.KEY)
+            if self.header.version == 5:
+                if not _HAS_AES:
+                    raise ImportError('pycryptodome is required for v5 ARK files.')
+                iv = metadata.unknown2[4:20]
+                cipher = _AES.new(self.AES_KEY, _AES.MODE_CTR, nonce=b'', initial_value=int.from_bytes(iv, 'big'))
+                file_data = cipher.decrypt(file_data)
+            else:
+                file_data = xxtea.decrypt(file_data, self.KEY)
         
         if file_info.compressed:
             if self.header.version == 1:
                 file_data = zlib.decompress(file_data)
-            elif self.header.version in [3,4]:
+            elif self.header.version in [3,4,5]:
                 file_data = self._decompressor.decompress(file_data, metadata.original_filesize)
             else:
                 raise ValueError(f'Unknown file version: {self.header.version}')
@@ -990,11 +1062,16 @@ class ARK:
 
             timestamp = datetime.fromtimestamp(metadata.timestamp)
             
+            # For v5, use per-file flag at byte 0 of unknown2 (bit 0 = AES encrypted)
+            is_encrypted = metadata.encrypted_size > 0
+            if self.header.version == 5:
+                is_encrypted = bool(metadata.unknown2[0] & 1) if len(metadata.unknown2) >= 1 else False
+            
             return ARKInfo(
                 _filename = metadata.full_path,
                 _timestamp = timestamp,
                 _compressed = metadata.compressed_size != metadata.original_filesize,
-                _encrypted = metadata.encrypted_size > 0,
+                _encrypted = is_encrypted,
                 _size = metadata.original_filesize,
                 _md5sum = metadata.md5sum,
                 _priority = metadata.priority,

@@ -25,6 +25,7 @@ ark = [
   "zstandard",
   "dataclasses-struct",
   "lxml",
+  "pycryptodome",
 ]
 
 loc = []
@@ -88,6 +89,7 @@ cli = [
   "xxtea",
   "zstandard",
   "dataclasses-struct",
+  "pycryptodome",
 
   "Pillow",
 
@@ -113,6 +115,7 @@ all = [
   "xxtea",
   "zstandard",
   "dataclasses-struct",
+  "pycryptodome",
 
   "Pillow",
 
