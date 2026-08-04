@@ -76,7 +76,7 @@ class _v3v4Header(DataclassStructProtocol):
     metadata_offset: dcs.U32 = 0
     version: dcs.U32 = 0
     metadata_length: dcs.U32 = 0
-    unknown: Annotated[bytes, 16] = b'\x00' * 16
+    aes_metadata_iv: Annotated[bytes, 16] = b'\x00' * 16
 
 _HEADER_STRUCTS: dict[int, Type[_v1Header | _v3v4Header]] = {
     1: _v1Header,
@@ -91,7 +91,7 @@ class ARKHeader:
     version: int = 4
     metadata_offset: int = -1
     metadata_length: int = -1
-    unknown: bytes = b''
+    aes_metadata_iv: bytes = b''
 
     @property
     def packed_size(self) -> int:
@@ -135,7 +135,7 @@ class ARKHeader:
                 metadata_offset = self.metadata_offset,
                 version = self.version,
                 metadata_length = self.metadata_length,
-                unknown = self.unknown,
+                aes_metadata_iv = self.aes_metadata_iv,
             ).pack()
         else:
             raise BadARKFile(f'Unknown file version {self.version}')
@@ -181,7 +181,7 @@ class ARKHeader:
             version = header.version,
             metadata_offset = header.metadata_offset,
             metadata_length = header.metadata_length if isinstance(header, _v3v4Header) else filesize - header.metadata_offset,
-            unknown = header.unknown if isinstance(header, _v3v4Header) else b'',
+            aes_metadata_iv = header.aes_metadata_iv if isinstance(header, _v3v4Header) else b'',
         )
     
     def copy(self) -> 'ARKHeader':
@@ -196,7 +196,7 @@ class ARKHeader:
             self.version,
             self.metadata_offset,
             self.metadata_length,
-            self.unknown,
+            self.aes_metadata_iv,
         )
 
 
@@ -235,13 +235,13 @@ class _v5MetadataStruct(DataclassStructProtocol):
     original_filesize: dcs.U32
     compressed_size: dcs.U32
     encrypted_size: dcs.U32
-    unknown_block1: Annotated[bytes, 16]
-    unknown_block2: Annotated[bytes, 16]
-    unknown_block3: Annotated[bytes, 16]
-    md5sum: Annotated[bytes, 8]
-    unknown_padding1: Annotated[bytes, 8]
+    timestamp: dcs.U32
+    unknown1: dcs.U32
+    unknown2: Annotated[bytes, 40]
+    md5sum: Annotated[bytes, 16]
     priority: dcs.U32
-    unknown_padding2: Annotated[bytes, 20]
+    aes_encrypted: dcs.U32
+    aes_iv: Annotated[bytes, 16]
 
 
 _METADATA_STRUCTS: dict[int, Type[_v1v3MetadataStruct | _v4MetadataStruct | _v5MetadataStruct]] = {
@@ -265,6 +265,8 @@ class ARKMetadata:
     unknown2: bytes = b''
     md5sum: bytes = b''
     priority: int = 0
+    aes_encrypted: bool = False
+    aes_iv: bytes = b''
 
     @property
     def full_path(self) -> str:
@@ -272,7 +274,7 @@ class ARKMetadata:
         return pathlib.PurePath(self.pathname, self.filename).as_posix()
 
     @classmethod
-    def unpack(cls, file: BinaryIO, version: int) -> Self:
+    def unpack(cls, file: BinaryIO | bytes, version: int) -> Self:
         """
         Read metadata from a file
 
@@ -290,9 +292,9 @@ class ARKMetadata:
         if not metadata_struct:
             raise BadARKFile(f'Unknown file version: {version}')
         
-        metadata = metadata_struct.from_packed(
-            file.read(metadata_struct.__dataclass_struct__.size)
-        )
+        raw_metadata = file if isinstance(file, bytes) else file.read(metadata_struct.__dataclass_struct__.size)
+        
+        metadata = metadata_struct.from_packed(raw_metadata)
 
         return cls(
             filename = read_ascii_string(metadata.filename),
@@ -301,11 +303,13 @@ class ARKMetadata:
             original_filesize = metadata.original_filesize,
             compressed_size = metadata.compressed_size,
             encrypted_size = metadata.encrypted_size,
-            timestamp = struct.unpack('<I', metadata.unknown_block1[:4])[0] if isinstance(metadata, _v5MetadataStruct) else metadata.timestamp,
-            unknown1 = metadata.unknown1 if isinstance(metadata, _v4MetadataStruct) else 0,
-            unknown2 = metadata.unknown2 if isinstance(metadata, _v4MetadataStruct) else (metadata.unknown_padding2 if isinstance(metadata, _v5MetadataStruct) else b''),
-            md5sum = metadata.md5sum if not isinstance(metadata, _v5MetadataStruct) else (metadata.md5sum + metadata.unknown_padding1),
+            timestamp = metadata.timestamp,
+            unknown1 = metadata.unknown1 if isinstance(metadata, (_v4MetadataStruct, _v5MetadataStruct)) else 0,
+            unknown2 = metadata.unknown2 if isinstance(metadata, (_v4MetadataStruct, _v5MetadataStruct)) else b'',
+            md5sum = metadata.md5sum,
             priority = metadata.priority,
+            aes_encrypted = bool(metadata.aes_encrypted) if isinstance(metadata, _v5MetadataStruct) else False,
+            aes_iv = metadata.aes_iv if isinstance(metadata, _v5MetadataStruct) else b'',
         )
     
     def pack(self, version: int) -> bytes:
@@ -351,6 +355,22 @@ class ARKMetadata:
                 unknown2 = self.unknown2,
                 priority = self.priority,
             ).pack()
+        elif issubclass(metadata_struct, _v5MetadataStruct):
+            return metadata_struct(
+                filename = self.filename.encode(),
+                pathname = self.pathname.encode(),
+                file_location = self.file_location,
+                original_filesize = self.original_filesize,
+                compressed_size = self.compressed_size,
+                encrypted_size = self.encrypted_size,
+                md5sum = self.md5sum,
+                timestamp = self.timestamp,
+                unknown1 = self.unknown1,
+                unknown2 = self.unknown2,
+                priority = self.priority,
+                aes_encrypted = int(self.aes_encrypted),
+                aes_iv = self.aes_iv,
+            ).pack()
         else:
             raise BadARKFile(f'Unknown file version: {version}')
 
@@ -381,17 +401,19 @@ class ARKMetadata:
             ARKMetadata
         """
         return ARKMetadata(
-            self.filename,
-            self.pathname,
-            self.file_location,
-            self.original_filesize,
-            self.compressed_size,
-            self.encrypted_size,
-            self.timestamp,
-            self.unknown1,
-            self.unknown2,
-            self.md5sum,
-            self.priority,
+            filename = self.filename,
+            pathname = self.pathname,
+            file_location = self.file_location,
+            original_filesize = self.original_filesize,
+            compressed_size = self.compressed_size,
+            encrypted_size = self.encrypted_size,
+            timestamp = self.timestamp,
+            unknown1 = self.unknown1,
+            unknown2 = self.unknown2,
+            md5sum = self.md5sum,
+            priority = self.priority,
+            aes_encrypted = self.aes_encrypted,
+            aes_iv = self.aes_iv,
         )
 
 @dataclass
@@ -405,6 +427,8 @@ class ARKInfo:
     _priority: int = 0
     _unknown1: int = 0
     _unknown2: bytes = b''
+    _aes_encrypted: bool = False
+    _aes_iv: bytes = b''
 
     _dirty: bool = False
 
@@ -436,6 +460,12 @@ class ARKInfo:
     def unknown2(self) -> bytes:
         return self._unknown2
     @property
+    def aes_encrypted(self) -> bool:
+        return self._aes_encrypted
+    @property
+    def aes_iv(self) -> bytes:
+        return self._aes_iv
+    @property
     def dirty(self) -> bool:
         """
         This signifies if this file has been edited
@@ -452,7 +482,7 @@ class ARKInfo:
         for i, fieldname in enumerate(self.__dataclass_fields__):
             attr = fieldname.removeprefix('_')
             result += f'{attr}={repr(getattr(self, attr))}'
-            if i == length:
+            if i < length:
                 result += ', '
         result += ')'
         return result
@@ -463,32 +493,6 @@ class ARK:
     AES_KEY = bytes.fromhex('7d24a71a82a2d62d49d3551d0c68cb062f7c7d0bdcc506260699ff26875d71f6')
     _decompressor = zstandard.ZstdDecompressor()
 
-    def _decrypt_metadata(self, data: bytes) -> bytes:
-        """Decrypt metadata bytes based on ARK version."""
-        if self.header.version == 5:
-            cipher = AES.new(
-                self.AES_KEY,
-                AES.MODE_CTR,
-                nonce=b'',
-                initial_value=int.from_bytes(self.header.unknown, 'big'),
-            )
-            return cipher.decrypt(data)
-        else:
-            return xxtea.decrypt(data, self.XXTEA_KEY)
-
-    def _encrypt_metadata(self, data: bytes) -> bytes:
-        """Encrypt metadata bytes based on ARK version."""
-        if self.header.version == 5:
-            cipher = AES.new(
-                self.AES_KEY,
-                AES.MODE_CTR,
-                nonce=b'',
-                initial_value=int.from_bytes(self.header.unknown, 'big'),
-            )
-            return cipher.encrypt(data)
-        else:
-            return xxtea.encrypt(data, self.XXTEA_KEY)
-
     __file_ctx: nullcontext | BinaryIO | None
     __file_pointer: BinaryIO | None
     mode: Literal['r', 'w', 'a']
@@ -498,7 +502,12 @@ class ARK:
     __file_buffer: 'dict[str, ARKFile]'
     __removed_files: list[str]
 
-    def __init__(self, file: PathOrBinaryFile, mode: Literal['r', 'w', 'a'] = 'r'):
+    def __init__(
+        self,
+        file: PathOrBinaryFile,
+        mode: Literal['r', 'w', 'a'] = 'r',
+        debug: bool = False,
+    ):
         """
         This is the main entry interacting with ark files. This class is also
         a context manager, which handles opening and closing.
@@ -599,7 +608,7 @@ class ARK:
         
         self.__file_ctx = open_binary(file, file_mode)
         self.__file_pointer = self.__file_ctx.__enter__()
-        if mode in ['r', 'a']:
+        if not debug and mode in ['r', 'a']:
             self._read()
     
     def _read(self):
@@ -610,6 +619,65 @@ class ARK:
     def _read_header(self):
         if self.__file_pointer:
             self.header = ARKHeader.unpack(self.__file_pointer)
+
+    def _get_raw_metadata(self):
+        if not self.__file_pointer:
+            return
+        
+        packed_metadata_size = xxtea.get_phdr_size(self.header.metadata_length)
+
+        self.__file_pointer.seek(self.header.metadata_offset, os.SEEK_SET)
+        raw_metadata = self.__file_pointer.read(packed_metadata_size)
+        return raw_metadata
+
+    
+    def _decrypt_metadata(self, data: bytes) -> bytes:
+        """Decrypt metadata bytes based on ARK version."""
+        if self.header.version == 5:
+            cipher = AES.new(
+                self.AES_KEY,
+                AES.MODE_CTR,
+                nonce=b'',
+                initial_value=int.from_bytes(self.header.aes_metadata_iv, 'big'),
+            )
+            return cipher.decrypt(data)
+        else:
+            return xxtea.decrypt(data, self.XXTEA_KEY)
+
+    def _encrypt_metadata(self, data: bytes) -> bytes:
+        """Encrypt metadata bytes based on ARK version."""
+        if self.header.version == 5:
+            cipher = AES.new(
+                self.AES_KEY,
+                AES.MODE_CTR,
+                nonce=b'',
+                initial_value=int.from_bytes(self.header.aes_metadata_iv, 'big'),
+            )
+            return cipher.encrypt(data)
+        else:
+            return xxtea.encrypt(data, self.XXTEA_KEY)
+    
+    def _decompress_metadata(self, compressed_metadata: bytes):
+        metadata_struct = _METADATA_STRUCTS[self.header.version]
+        metadata_size = dcs.get_struct_size(metadata_struct)
+        raw_metadata_size = self.header.file_count * metadata_size
+        return self._decompressor.decompress(compressed_metadata, raw_metadata_size)
+    
+    def _parse_metadata(self, raw_metadata: bytes):
+        metadata_collection: list[ARKMetadata] = []
+
+        metadata_struct = _METADATA_STRUCTS[self.header.version]
+        metadata_size = dcs.get_struct_size(metadata_struct)
+
+        for file_index in range(self.header.file_count):
+            offset = file_index * metadata_size
+
+            metadata_collection.append(ARKMetadata.unpack(
+                raw_metadata[offset : offset + metadata_size],
+                self.header.version,
+            ))
+        
+        return metadata_collection
 
     def _read_metadata_block(self):
         if not self.__file_pointer:
@@ -640,52 +708,24 @@ class ARK:
         metadata_struct = _METADATA_STRUCTS[self.header.version]
         metadata_size = dcs.get_struct_size(metadata_struct)
         raw_metadata_size = self.header.file_count * metadata_size
-        packed_metadata_size = xxtea.get_phdr_size(self.header.metadata_length)
 
-
-        self.__file_pointer.seek(self.header.metadata_offset, os.SEEK_SET)
-
-        raw_metadata = self.__file_pointer.read(packed_metadata_size)
-
-        self.encrypted_metadata = raw_metadata
+        raw_metadata = self._get_raw_metadata()
+        if not raw_metadata:
+            return
 
         raw_metadata = self._decrypt_metadata(raw_metadata)
 
-        self.compressed_metadata = raw_metadata
-
         if self.header.version in [3,4,5]:
-            raw_metadata = self._decompressor.decompress(raw_metadata, raw_metadata_size)
+            raw_metadata = self._decompress_metadata(raw_metadata)
         
         if len(raw_metadata) != raw_metadata_size:
             raise BadARKFile(f"Expecting metadata size of {raw_metadata_size} but got {len(raw_metadata)}")
         
-        self.raw_metadata = raw_metadata
-
-        for file_index in range(self.header.file_count):
-            offset = file_index * metadata_size
-
-            metadata = metadata_struct.from_packed(
-                raw_metadata[offset : offset + metadata_size]
-            )
-
-            self.__metadata_collection._add_metadata(ARKMetadata(
-                filename = read_ascii_string(metadata.filename),
-                pathname = read_ascii_string(metadata.pathname),
-                file_location = metadata.file_location,
-                original_filesize = metadata.original_filesize,
-                compressed_size = metadata.compressed_size,
-                encrypted_size = metadata.encrypted_size,
-                timestamp = struct.unpack('<I', metadata.unknown_block1[:4])[0] if isinstance(metadata, _v5MetadataStruct) else metadata.timestamp,
-                unknown1 = metadata.unknown1 if isinstance(metadata, _v4MetadataStruct) else 0,
-                unknown2 = metadata.unknown2 if isinstance(metadata, _v4MetadataStruct) else (metadata.unknown_padding2 if isinstance(metadata, _v5MetadataStruct) else b''),
-                md5sum = (metadata.md5sum + metadata.unknown_padding1) if isinstance(metadata, _v5MetadataStruct) else metadata.md5sum,
-                priority = metadata.priority,
-            ), raw = True)
+        for metadata in self._parse_metadata(raw_metadata):
+            self.__metadata_collection._add_metadata(metadata, raw = True)
+            self._info_collection[metadata.full_path] = self.getinfo(metadata)
         
         self.__metadata_collection._sort_collection()
-
-        for metadata in self.__metadata_collection:
-            self._info_collection[metadata.full_path] = self.getinfo(metadata)
 
     def _write_metadata_block(self, metadata_list: list[ARKMetadata]):
         data = b''
@@ -723,12 +763,19 @@ class ARK:
         self.__file_pointer.seek(metadata.file_location, os.SEEK_SET)
         file_data = self.__file_pointer.read(packed_size)
 
-        if file_info.encrypted:
-            if self.header.version == 5:
-                iv = metadata.unknown2[4:20]
-                cipher = AES.new(self.AES_KEY, AES.MODE_CTR, nonce=b'', initial_value=int.from_bytes(iv, 'big'))
+        if file_info.encrypted or file_info.aes_encrypted:
+            if file_info.aes_encrypted:
+                cipher = AES.new(
+                    self.AES_KEY,
+                    AES.MODE_CTR,
+                    nonce = b'',
+                    initial_value = int.from_bytes(metadata.aes_iv, 'big'),
+                )
                 file_data = cipher.decrypt(file_data)
             else:
+                if self.header.version == 5:
+                    print(f'v5 file "{file_info.filename}" encrypted with xxtea', metadata)
+                
                 file_data = xxtea.decrypt(file_data, self.XXTEA_KEY)
         
         if file_info.compressed:
@@ -1050,8 +1097,6 @@ class ARK:
             
             # For v5, use per-file flag at byte 0 of unknown2 (bit 0 = AES encrypted)
             is_encrypted = metadata.encrypted_size > 0
-            if self.header.version == 5:
-                is_encrypted = bool(metadata.unknown2[0] & 1) if len(metadata.unknown2) >= 1 else False
             
             return ARKInfo(
                 _filename = metadata.full_path,
@@ -1063,6 +1108,8 @@ class ARK:
                 _priority = metadata.priority,
                 _unknown1 = metadata.unknown1,
                 _unknown2 = metadata.unknown2,
+                _aes_encrypted = metadata.aes_encrypted,
+                _aes_iv = metadata.aes_iv,
             )
         else:
             info = self._info_collection.get(file)
@@ -1113,6 +1160,8 @@ class ARK:
             unknown1 = file.unknown1,
             unknown2 = file.unknown2,
             timestamp = timestamp,
+            aes_encrypted = file.aes_encrypted,
+            aes_iv = file.aes_iv,
         )
 
     def infolist(self) -> list[ARKInfo]:
@@ -1299,6 +1348,9 @@ class ARK:
             exc_val = exc_val,
             exc_traceback = exc_traceback,
         )
+    
+    def __del__(self):
+        self.close()
 
 
 class ARKFile(io.BufferedIOBase):
