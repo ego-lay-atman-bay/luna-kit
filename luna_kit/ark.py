@@ -1200,6 +1200,11 @@ class ARK:
         
         return list(self._info_collection.keys())
     
+    def validate(self, file: 'str | ARKInfo | ARKMetadata'):
+        info = self.getinfo(file)
+        with self.open(file, 'r') as arkfile:
+                return info.md5sum == arkfile.md5sum
+    
     def testark(self) -> list[str]:
         """
         Read every file and test against the hash. Any files that don't

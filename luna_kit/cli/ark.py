@@ -1,7 +1,16 @@
-import os
 from argparse import ArgumentParser, Namespace
+import os
 
-from rich.progress import Progress, track, TextColumn, BarColumn, MofNCompleteColumn, TimeRemainingColumn
+from rich.live import Live
+from rich.progress import (
+    BarColumn,
+    MofNCompleteColumn,
+    Progress,
+    TextColumn,
+    TimeRemainingColumn,
+    track,
+)
+from rich.table import Table
 
 from ..console import console, track
 from ._actions import GlobFiles
@@ -37,6 +46,13 @@ class ARKParser(CLICommand):
             dest = 'filter',
             nargs = '+',
             help = 'Only list these files. Can be glob pattern.'
+        )
+
+        list_.add_argument(
+            '--verify',
+            dest = 'verify',
+            action = 'store_true',
+            help = 'Verify files are intact',
         )
 
         extract = subcommand.add_parser(
@@ -120,8 +136,12 @@ class ARKParser(CLICommand):
 
         if args.action == 'list':
             files: list[str] = args.files
+            errors: dict[str, list[str]] = {}
+            
             for filename in files:
                 ark_name_printed = False
+
+
                 with ARK(filename) as ark:
                     for info in ark.infolist():
                         if isinstance(args.filter, list) and not any(fnmatch.fnmatch(info.filename, pattern) for pattern in args.filter):
@@ -129,10 +149,31 @@ class ARKParser(CLICommand):
 
                         # Don't show ark name if there's no files to list
                         if not ark_name_printed:
-                            console.print(f'[yellow]{os.path.basename(filename)}[/]')
+                            console.print(f'[yellow underline]{os.path.basename(filename)}[/]')
                             ark_name_printed = True
 
-                        print(info.filename, info.timestamp)
+                        row = [
+                            info.filename,
+                            info.timestamp.strftime('%Y-%m-%d %H:%M:%SZ') if info.timestamp else 'Unknown',
+                            '[red]compressed[/red]' if info.compressed  else '[green]uncompressed[/green]',
+                            '[red]encrypted[/red]' if info.encrypted or info.aes_encrypted else '[green]unencrypted[/green]',
+                        ]
+
+                        if args.verify:
+                            valid = ark.validate(info)
+                            row.append('[green]valid[/green]' if valid else '[red]broken[/red]')
+
+                            if not valid:
+                                errors.setdefault(filename, []).append(info.filename)
+
+                        console.print(*row, sep = ', ')
+
+            if args.verify:
+                for filename in files:
+                    if filename in errors and len(errors[filename]):
+                        console.print(f'[red]{os.path.basename(filename)}: {len(errors[filename])} errors[/]')
+                    else:
+                        console.print(f'[green]{os.path.basename(filename)}: 0 errors[/]')
         
         elif args.action == 'extract':
             arks: list[str] = args.files
@@ -156,7 +197,7 @@ class ARKParser(CLICommand):
 
             for ark_filename in arks:
                 output = base_output.format(name = os.path.splitext(os.path.basename(ark_filename)))
-                errors = 0
+                errors: int = 0
                 try:
                     with ARK(ark_filename) as ark:
                         console.print(f'Extracting [yellow]{os.path.basename(ark_filename)}[/]')
@@ -184,7 +225,7 @@ class ARKParser(CLICommand):
                                 e.add_note(f'filename: {filename}')
                                 errors += 1
                                 if args.ignore_errors:
-                                    console.print(e)
+                                    console.print(filename, e)
                                 else:
                                     raise e
                     
