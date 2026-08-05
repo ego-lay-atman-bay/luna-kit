@@ -1,5 +1,6 @@
 from argparse import ArgumentParser, Namespace
 import os
+from typing import Literal
 
 from rich.live import Live
 from rich.progress import (
@@ -137,6 +138,7 @@ class ARKParser(CLICommand):
         if args.action == 'list':
             files: list[str] = args.files
             errors: dict[str, list[str]] = {}
+            summary: dict[str, dict[Literal['files', 'errors'], int]] = {}
             
             for filename in files:
                 ark_name_printed = False
@@ -159,21 +161,32 @@ class ARKParser(CLICommand):
                             '[red]encrypted[/red]' if info.encrypted or info.aes_encrypted else '[green]unencrypted[/green]',
                         ]
 
+                        file_summary = summary.setdefault(filename, {
+                            'errors': 0,
+                            'files': 0,
+                        })
+
+                        file_summary['files'] += 1
+
                         if args.verify:
                             valid = ark.validate(info)
                             row.append('[green]valid[/green]' if valid else '[red]broken[/red]')
 
                             if not valid:
-                                errors.setdefault(filename, []).append(info.filename)
+                                file_summary['errors'] += 1
 
                         console.print(*row, sep = ', ')
 
-            if args.verify:
-                for filename in files:
-                    if filename in errors and len(errors[filename]):
-                        console.print(f'[red]{os.path.basename(filename)}: {len(errors[filename])} errors[/]')
-                    else:
-                        console.print(f'[green]{os.path.basename(filename)}: 0 errors[/]')
+            console.line()
+            console.print('Summary:')
+
+            for filename, file_summary in summary.items():
+                console.print(f'{os.path.basename(filename)}: {file_summary["files"]} files', end = '')
+                if args.verify:
+                    style = 'red' if file_summary['errors'] else 'green'
+                    console.print(f', [{style}]{file_summary["errors"]} errors[/{style}]')
+                else:
+                    console.print()
         
         elif args.action == 'extract':
             arks: list[str] = args.files
