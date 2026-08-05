@@ -1353,9 +1353,6 @@ class ARK:
             exc_val = exc_val,
             exc_traceback = exc_traceback,
         )
-    
-    def __del__(self):
-        self.close()
 
 
 class ARKFile(io.BufferedIOBase):
