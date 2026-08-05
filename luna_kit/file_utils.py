@@ -67,7 +67,9 @@ def open_binary(
     if 'b' not in mode:
         mode += 'b'
     
-    if 'r' in mode and isinstance(file, (str, Path)) and os.path.isfile(file):
+    if isinstance(file, (str, Path)) and os.path.isdir(file):
+        raise IsADirectoryError('cannot open directory as file')
+    elif 'r' in mode and isinstance(file, (str, Path)) and os.path.isfile(file):
         context_manager = open(
             file,
             mode,
@@ -123,7 +125,9 @@ def open_text_file(
     Returns:
         BinaryIO: File-like object. Note: if a file-like object was passed in, `.__exit__()` will not do anything.
     """
-    if 'r' in mode and isinstance(file, (str, Path)) and os.path.isfile(file):
+    if isinstance(file, (str, Path)) and os.path.isdir(file):
+        raise IsADirectoryError('cannot open directory as file')
+    elif 'r' in mode and isinstance(file, (str, Path)) and os.path.isfile(file):
         context_manager = open(
             file,
             mode,
