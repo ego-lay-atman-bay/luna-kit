@@ -111,7 +111,7 @@ class DumpCommand(CLICommand):
         from glob import glob
         import charset_normalizer
         from ..safe_format import safe_format
-        from ..ark import ARK
+        from ..ark import ARK, BadARKFile
         from ..ark_filename import sort_ark_filenames
         from ..xml import parse_xml, tostring
         from ..texatlas import TexAtlas
@@ -167,10 +167,20 @@ class DumpCommand(CLICommand):
 
         base_output = args.output
 
-        arks: list[str] = args.files
+        filenames: list[str] = args.files
+        arks: list[str] = []
+
+        for filename in filenames:
+            if os.path.isdir(filename):
+                arks.extend(glob(os.path.join(filename, '*.ark')))
+            elif os.path.isfile(filename):
+                arks.append(filename)
+        
         if len(arks) == 0:
             console.print('[red]No ark files found[/]')
             return
+        
+        
 
         try:
             arks = sort_ark_filenames(arks)
@@ -208,6 +218,8 @@ class DumpCommand(CLICommand):
                                 console.print(e)
                             else:
                                 raise e
+            except BadARKFile:
+                console.print(f'[red]"{ark_filename}" not an ark file[/]')
             except Exception as e:
                 e.add_note(f'ark: {os.path.basename(ark_filename)}')
                 raise e
