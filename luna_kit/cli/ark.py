@@ -137,7 +137,6 @@ class ARKParser(CLICommand):
 
         if args.action == 'list':
             files: list[str] = args.files
-            errors: dict[str, list[str]] = {}
             summary: dict[str, dict[Literal['files', 'errors'], int]] = {}
             
             for filename in files:
