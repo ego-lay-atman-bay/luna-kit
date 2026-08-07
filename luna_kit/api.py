@@ -1,11 +1,12 @@
+from concurrent.futures import ThreadPoolExecutor
 from copy import copy
 from dataclasses import dataclass
 from functools import wraps
 import hashlib
 import io
 import os
-import re
 from pathlib import Path
+import re
 from typing import (
     BinaryIO,
     Callable,
@@ -67,22 +68,56 @@ def xxh32_file(file: PathOrBinaryFile, seed: int = ASSET_HASH_SEED) -> str:
 
 
 def get_latest_version() -> str | None:
-    try:
-        response = requests.post(
-            "https://www.apkmirror.com/wp-json/apkm/v1/app_exists?pnames=com.gameloft.android.ANMP.GloftPOHM",
-            headers = {
-                "User-Agent": "APKUpdater-v3.0.3",
-                # This is a key from APKUpdater https://github.com/rumboalla/apkupdater/issues/58#issuecomment-309238684
-                "Authorization": "Basic YXBpLWFwa3VwZGF0ZXI6cm01cmNmcnVVakt5MDRzTXB5TVBKWFc4"
-            }
-        )
-        response.raise_for_status()
+    def check_apkmirror() -> str | None:
+        try:
+            response = requests.post(
+                "https://www.apkmirror.com/wp-json/apkm/v1/app_exists?pnames=com.gameloft.android.ANMP.GloftPOHM",
+                headers = {
+                    "User-Agent": "APKUpdater-v3.0.3",
+                    # This is a key from APKUpdater https://github.com/rumboalla/apkupdater/issues/58#issuecomment-309238684
+                    "Authorization": "Basic YXBpLWFwa3VwZGF0ZXI6cm01cmNmcnVVakt5MDRzTXB5TVBKWFc4"
+                }
+            )
+            response.raise_for_status()
 
-        raw_app_info = response.json()
-        return raw_app_info['data'][0]['release']['version']
-    except requests.HTTPError:
-        app_info = gplay.app(PACKAGE_NAME)
-        return app_info['version']
+            raw_app_info = response.json()
+            return raw_app_info['data'][0]['release']['version']
+        except requests.HTTPError:
+            return
+    
+    def check_gplay() -> str | None:
+        try:
+            app_info = gplay.app(PACKAGE_NAME)
+            return app_info['version']
+        except:
+            return
+
+    def check_atp() -> str | None:
+        try:
+            response = requests.get('https://assets.all-the-ponies.com/game_version_checker/game_version.json')
+            response.raise_for_status()
+            return response.json()['game_version']
+        except requests.HTTPError:
+            return
+    
+    with ThreadPoolExecutor(max_workers = 3) as threader:
+        futures = [
+            threader.submit(check_atp),
+            threader.submit(check_gplay),
+            threader.submit(check_apkmirror),
+        ]
+        versions = [
+            version for version in
+            (future.result() for future in futures)
+            if version
+        ]
+    
+    return sorted(
+        versions,
+        key = lambda version: Version.parse(version),
+        reverse = True,
+    )[0]
+        
 
 
 @dataclass
