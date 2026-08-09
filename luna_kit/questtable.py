@@ -41,7 +41,7 @@ class Task:
     has_go: bool = False
     no_skip_by_ads: bool = False
 
-    counts: list[Count] = dataclasses.field(default_factory = list)
+    counts: Count | None = None
 
 @dataclass
 class Event:
@@ -66,19 +66,20 @@ class QuestInfo:
     complete_description: str = ''
     tracking_id: int = 0
     mapzone: int = -1
+    any_quest: bool = False
 
 @dataclass
 class QuestRequirements:
     any_quest: bool = False
     quests_completed: list[str] = dataclasses.field(default_factory = list)
     global_counts: list[Count] = dataclasses.field(default_factory = list)
-    start_zones: list[int] = dataclasses.field(default_factory = list)
+    no_start_zones: list[int] = dataclasses.field(default_factory = list)
 
 @dataclass
 class QuestRewards:
     bits: int = 0
     gems: int = 0
-    social_currency: int = 0
+    hearts: int = 0
     xp: int = 0
     item: Item = dataclasses.field(default_factory = Item)
     item2: Item = dataclasses.field(default_factory = Item)
@@ -119,6 +120,7 @@ class Quest:
                 complete_description = info_el.get('CompleteDescription', ''),
                 tracking_id = strToInt(info_el.get('TrackingID', '')),
                 mapzone = strToInt(info_el.get('MapZone', '')),
+                any_quest = strToBool(info_el.get('AnyQuest', '0')),
             )
         else:
             info = QuestInfo()
@@ -176,7 +178,7 @@ class Quest:
                     has_go = strToBool(task.get('HasGo', '')),
                     no_skip_by_ads = strToBool(task.get('NoSkipByAds', '')),
                     
-                    counts = global_counts,
+                    counts = global_counts[0] if len(global_counts) else None,
                 ))
 
         rewards_el = element.find('Rewards')
@@ -190,7 +192,7 @@ class Quest:
                     case 'HardCurrency':
                         rewards.gems = strToInt(reward.get('Value', '0'))
                     case 'SocialCurrency':
-                        rewards.social_currency = strToInt(reward.get('Value', '0'))
+                        rewards.hearts = strToInt(reward.get('Value', '0'))
                     case 'Exp':
                         rewards.xp = strToInt(reward.get('Value', '0'))
                     case 'Item':
@@ -252,7 +254,7 @@ class Quest:
 class QuestTable(UserDict):
     data: dict[str, Quest]
 
-    def __init__(self, filename: str) -> None:
+    def __init__(self, filename: PathOrBinaryFile) -> None:
         super().__init__()
 
         self.categories: dict[str, dict[str, Quest]] = {}
@@ -270,6 +272,15 @@ class QuestTable(UserDict):
     @quests.setter
     def quests(self, data: dict):
         self.data = data
+    
+    def keys(self):
+        return self.data.keys()
+
+    def values(self):
+        return self.data.values()
+
+    def items(self):
+        return self.data.items()
 
 @dataclass
 class QuestCategory:
