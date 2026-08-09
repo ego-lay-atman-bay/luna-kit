@@ -2,6 +2,7 @@ from collections import UserDict
 from dataclasses import field
 from dataclasses import dataclass
 import os
+from pathlib import Path
 
 from lxml import etree
 
@@ -82,7 +83,7 @@ class CinematicTable(UserDict):
         """
         super().__init__()
 
-        if isinstance(cinematictable, str) and cinematicmanager is None:
+        if isinstance(cinematictable, (str, Path)) and cinematicmanager is None:
             cinematictable = os.path.abspath(cinematictable)
             cinematicmanager = os.path.join(os.path.dirname(cinematictable), 'cinematicmanager.xml')
         
@@ -103,6 +104,15 @@ class CinematicTable(UserDict):
     @scenes.setter
     def scenes(self, value: dict[str, Scene]):
         self.data = value
+    
+    def keys(self):
+        return self.data.keys()
+
+    def values(self):
+        return self.data.values()
+
+    def items(self):
+        return self.data.items()
     
     def _parse_schema(self, cinematicmanager_xml: etree._Element):
         self._schema.clear()
@@ -125,7 +135,7 @@ class CinematicTable(UserDict):
                     continue
 
                 if element.tag == 'Tag':
-                    event_type.tag = element.text
+                    event_type.tag = element.text or ''
                 
                 if element.tag == 'Parameter':
                     parameter = ParameterType(
@@ -186,7 +196,7 @@ class CinematicTable(UserDict):
                     
                     parameter_type = None
                     if event_type is not None:
-                        parameter_type = event_type.parameters.get(parameter_xml.tag)
+                        parameter_type = event_type.parameters.get(str(parameter_xml.tag))
                     else:
                         console.print(f'[yellow]unknown event type: {event.name}')
 
@@ -196,4 +206,4 @@ class CinematicTable(UserDict):
                             if attribute_type is not None:
                                 value = attribute_type.parse_value(value)
                         
-                        event.parameters.setdefault(parameter_xml.tag, {})[attribute] = value
+                        event.parameters.setdefault(str(parameter_xml.tag), {})[attribute] = value
