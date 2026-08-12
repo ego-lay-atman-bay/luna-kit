@@ -209,6 +209,7 @@ If you are writing a script that uses luna kit, it is important to know all the 
 - `[xml]`: Required for reading xml files
 - `[texatlas]`: Required for reading `.texatlas` files
 - `[pvr]`: Required for reading `.pvr` files
+- `[swf]`: Required for reading `.swf` files
 - `[model]`: Required for reading `.rk` and `.anim` files (and for doing transformations)
 - `[rk]`: Barebones requirements for reading `.rk` and `.anim` files
 - `[download]`: Everything needed to downloaded ark files

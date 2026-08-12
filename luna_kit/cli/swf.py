@@ -31,7 +31,7 @@ class SwfCommand(CLICommand):
 
     @classmethod
     def run_command(cls, args):
-        from ..swf import swf2webp, fix_swf
+        from ..swf import SWF
         from ..console import console
         import shutil
         import os
@@ -51,9 +51,20 @@ class SwfCommand(CLICommand):
         if command == 'fix':
             if output is None:
                 output = input
-            fix_swf(input, output, ffdec_path = ffdec, console = console)
+            
+            console.print('Loading swf')
+            swf = SWF(input, ffdec = ffdec)
+            console.print('Fixing swf')
+            swf.fix()
+            swf.save(output)
+            console.print(f'Saved to "{output}"')
         else:
             if output is None:
                 output = os.path.splitext(input)[0] + '.webp'
-
-            swf2webp(input, output, ffdec_path = ffdec, console = console)
+            
+            console.print('Loading swf')
+            swf = SWF(input, ffdec = ffdec)
+            console.print('Fixing swf')
+            swf.fix()
+            console.print('Rendering webp')
+            swf.render_webp(output)

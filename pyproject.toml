@@ -10,11 +10,12 @@ authors = [
 description = " Read files in the My Little Pony Gameloft game"
 readme = "README.md"
 license = { file = "LICENSE" }
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
     "Operating System :: OS Independent",
+    ""
 ]
 dependencies = []
 dynamic = ["version"]
@@ -48,6 +49,12 @@ texatlas = [
 ]
 
 pvr = [
+  "dataclasses-struct",
+  "Pillow",
+  # "astc-encoder-py",
+  "texture2ddecoder",
+]
+swf = [
   "dataclasses-struct",
   "Pillow",
   # "astc-encoder-py",
