@@ -640,7 +640,10 @@ class ARK:
                 nonce=b'',
                 initial_value=int.from_bytes(self.header.aes_metadata_iv, 'big'),
             )
-            return cipher.decrypt(data)
+            result = cipher.decrypt(data)
+            if result[:4] != bytes.fromhex('28b52ffd'): # zstd magic
+                raise ValueError('Cannot decrypt metadata')
+            return result
         else:
             return xxtea.decrypt(data, self.XXTEA_KEY)
 
