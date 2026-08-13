@@ -3,6 +3,7 @@ from dataclasses import field
 from dataclasses import dataclass
 import os
 from pathlib import Path
+from typing import TypeVar, overload, Any
 
 from lxml import etree
 
@@ -47,13 +48,14 @@ class Event:
     name: str = ''
     wait_for_me: bool = False
     group: str = ''
-    parameters: dict[str, dict[str | bool | int | float]] = field(default_factory = dict)
+    parameters: dict[str, dict[str, str | bool | int | float]] = field(default_factory = dict)
 
 @dataclass
 class Scene:
     name: str = ''
     is_tutorial: bool = False
     track_tutorial_complete: bool = False
+    flash_id: str = ''
     events: list[Event] = field(default_factory = list)
 
 class CinematicTable(UserDict):
@@ -171,6 +173,7 @@ class CinematicTable(UserDict):
             scene = Scene(
                 name = scene_xml.get('Name', ''),
                 is_tutorial = strToBool(scene_xml.get('IsTutorial', '0')),
+                flash_id = scene_xml.get('FlashID', ''),
                 track_tutorial_complete = strToBool(scene_xml.get('TrackTutorialComplete', '0')),
             )
             self.scenes[scene.name] = scene
