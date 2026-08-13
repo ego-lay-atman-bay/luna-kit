@@ -6,6 +6,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+from typing import Self
 import weakref
 import xml.etree.ElementTree as ET
 
@@ -129,6 +130,12 @@ class SWF:
     def cleanup(self):
         self._finalize()
         # shutil.rmtree(self._work_dir, ignore_errors = True)
+    
+    def __enter__(self) -> Self:
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_traceback):
+        self.cleanup()
     
     def _ffdec_run(self, command: list[str], **kwargs):
         ffdec_path = str(self.ffdec_path)
