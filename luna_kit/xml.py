@@ -68,6 +68,7 @@ def parse_xml(
         f'<root>{data.decode(encoding)}</root>',
         parser = etree.XMLParser(
             recover = True,
+            remove_blank_text = True,
         )
     )
 
