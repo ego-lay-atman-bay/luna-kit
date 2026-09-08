@@ -490,7 +490,10 @@ class ARKInfo:
 class ARK:
     XXTEA_KEY = b'4*[=\x10\xff?\x92\xa4F\xe3\x00+\x90t\x0c'
     # XXTEA_KEY = [0x3d5b2a34, 0x923fff10, 0x00e346a4, 0x0c74902b]
-    AES_KEY = bytes.fromhex('7d24a71a82a2d62d49d3551d0c68cb062f7c7d0bdcc506260699ff26875d71f6')
+    AES_KEY = {
+        '11.3.0m': bytes.fromhex('7d24a71a82a2d62d49d3551d0c68cb062f7c7d0bdcc506260699ff26875d71f6'),
+        '11.4.0m': bytes.fromhex('d38ef7a3509ef6784f8e487fc4b10c2a83ea96430ef16f73b92ff4cbf97f0abe'),
+    }
     _decompressor = zstandard.ZstdDecompressor()
 
     __file_ctx: nullcontext | BinaryIO | None
@@ -634,16 +637,18 @@ class ARK:
     def _decrypt_metadata(self, data: bytes) -> bytes:
         """Decrypt metadata bytes based on ARK version."""
         if self.header.version == 5:
-            cipher = AES.new(
-                self.AES_KEY,
-                AES.MODE_CTR,
-                nonce=b'',
-                initial_value=int.from_bytes(self.header.aes_metadata_iv, 'big'),
-            )
-            result = cipher.decrypt(data)
-            if result[:4] != bytes.fromhex('28b52ffd'): # zstd magic
-                raise ValueError('Cannot decrypt metadata')
-            return result
+            for key in self.AES_KEY.values():
+                cipher = AES.new(
+                    key,
+                    AES.MODE_CTR,
+                    nonce=b'',
+                    initial_value=int.from_bytes(self.header.aes_metadata_iv, 'big'),
+                )
+                result = cipher.decrypt(data)
+                if result[:4] != bytes.fromhex('28b52ffd'): # zstd magic
+                    continue
+                return result
+            raise ValueError('Cannot decrypt metadata')
         else:
             return xxtea.decrypt(data, self.XXTEA_KEY)
 
@@ -769,7 +774,7 @@ class ARK:
         if file_info.encrypted or file_info.aes_encrypted:
             if file_info.aes_encrypted:
                 cipher = AES.new(
-                    self.AES_KEY,
+                    self.AES_KEY['11.4.0m'], # Temporary fix
                     AES.MODE_CTR,
                     nonce = b'',
                     initial_value = int.from_bytes(metadata.aes_iv, 'big'),
