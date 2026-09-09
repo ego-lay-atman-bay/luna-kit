@@ -44,10 +44,14 @@ def parse_rkm(filename: str):
         with open(filename, 'r', newline = '') as file:
             data = [row for row in csv.reader(file, delimiter='=') if len(row)]
         
-        return RKM(
-            filename = filename,
-            **dict(data),
-        )
+        try:
+            return RKM(
+                filename = filename,
+                **dict(data),
+            )
+        except Exception as e:
+            e.add_note(f'filename: {filename}')
+            raise e
     else:
         return RKM(
             filename = filename,
@@ -514,6 +518,9 @@ class RKM:
     NormalQualityForceDownscale: bool = False
     UseMipmaps: bool = False
     PixelFormat: Literal['888', ''] = ''
+    MaterialTemplateType: str = ''
+    Shader: str = ''
+    UserVector0_0: float = 0
     
     def __post_init__(self):
         for attr, field in self.__dataclass_fields__.items():
