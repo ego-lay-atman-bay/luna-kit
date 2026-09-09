@@ -148,6 +148,23 @@ class Version:
     def __str__(self) -> str:
         return f'{self.major}.{self.minor}.{self.patch}{self.letter}'
     
+    def __format__(self, format_spec: str, /) -> str:
+        if not format_spec:
+            return str(self)
+        
+        def replace(match: re.Match) -> str:
+            directive = match.group(1)
+            match directive:
+                case '%': return '%'
+                case 'M': return str(self.M)
+                case 'm': return str(self.m)
+                case 'p': return str(self.p)
+                case 'l': return str(self.l)
+                case None: return ''
+                case _: return f'%{directive}'
+        
+        return re.sub(r'%(.)', replace, format_spec)
+    
     def __lt__(self, other: 'str | Version') -> bool:
         if not isinstance(other, (str, Version)):
             return NotImplemented
@@ -181,6 +198,20 @@ class Version:
         other = Version.parse(other)
 
         return self == other or self < other
+    
+    @property
+    def M(self):
+        return self.major
+    @property
+    def m(self):
+        return self.minor
+    @property
+    def p(self):
+        return self.patch
+    @property
+    def l(self):
+        return self.letter
+    
 
 
 class DataCenter(TypedDict):
