@@ -490,10 +490,11 @@ class ARKInfo:
 class ARK:
     XXTEA_KEY = b'4*[=\x10\xff?\x92\xa4F\xe3\x00+\x90t\x0c'
     # XXTEA_KEY = [0x3d5b2a34, 0x923fff10, 0x00e346a4, 0x0c74902b]
-    AES_KEY = {
+    AES_KEYS = {
         '11.3.0m': bytes.fromhex('7d24a71a82a2d62d49d3551d0c68cb062f7c7d0bdcc506260699ff26875d71f6'),
         '11.4.0m': bytes.fromhex('d38ef7a3509ef6784f8e487fc4b10c2a83ea96430ef16f73b92ff4cbf97f0abe'),
     }
+    aes_key: bytes | None = None
     _decompressor = zstandard.ZstdDecompressor()
 
     __file_ctx: nullcontext | BinaryIO | None
@@ -509,6 +510,8 @@ class ARK:
         self,
         file: PathOrBinaryFile,
         mode: Literal['r', 'w', 'a'] = 'r',
+        aes_key: bytes | None = None,
+        *,
         debug: bool = False,
     ):
         """
@@ -594,6 +597,9 @@ class ARK:
         self.__file_buffer = {}
         self.__removed_files = []
 
+        if isinstance(aes_key, bytes):
+            self.aes_key = aes_key
+
         match mode:
             case 'w':
                 # Truncates file
@@ -633,35 +639,51 @@ class ARK:
         raw_metadata = self.__file_pointer.read(packed_metadata_size)
         return raw_metadata
 
+    def _aes_decrypt(self, data: bytes, key: bytes, iv: bytes):
+        cipher = AES.new(
+            key,
+            AES.MODE_CTR,
+            nonce = b'',
+            initial_value = int.from_bytes(iv, 'big'),
+        )
+        return cipher.decrypt(data)
+    
+    def _aes_encrypt(self, data: bytes, key: bytes, iv: bytes):
+        cipher = AES.new(
+            key,
+            AES.MODE_CTR,
+            nonce = b'',
+            initial_value = int.from_bytes(iv, 'big'),
+        )
+        return cipher.encrypt(data)
     
     def _decrypt_metadata(self, data: bytes) -> bytes:
         """Decrypt metadata bytes based on ARK version."""
         if self.header.version == 5:
-            for key in self.AES_KEY.values():
-                cipher = AES.new(
-                    key,
-                    AES.MODE_CTR,
-                    nonce=b'',
-                    initial_value=int.from_bytes(self.header.aes_metadata_iv, 'big'),
-                )
-                result = cipher.decrypt(data)
+            if self.aes_key is None:
+                for key in self.AES_KEYS.values():
+                    result = self._aes_decrypt(data, key, self.header.aes_metadata_iv)
+                    if result[:4] != bytes.fromhex('28b52ffd'): # zstd magic
+                        continue
+                    
+                    self.aes_key = key
+                    return result
+                raise ValueError('Cannot decrypt metadata')
+            else:
+                result = self._aes_decrypt(data, self.aes_key, self.header.aes_metadata_iv)
                 if result[:4] != bytes.fromhex('28b52ffd'): # zstd magic
-                    continue
+                    raise ValueError('Cannot decrypt metadata')
                 return result
-            raise ValueError('Cannot decrypt metadata')
         else:
             return xxtea.decrypt(data, self.XXTEA_KEY)
 
     def _encrypt_metadata(self, data: bytes) -> bytes:
         """Encrypt metadata bytes based on ARK version."""
         if self.header.version == 5:
-            cipher = AES.new(
-                self.AES_KEY,
-                AES.MODE_CTR,
-                nonce=b'',
-                initial_value=int.from_bytes(self.header.aes_metadata_iv, 'big'),
-            )
-            return cipher.encrypt(data)
+            if self.aes_key is None:
+                self.aes_key = list(self.AES_KEYS.values())[-1]
+            
+            return self._aes_encrypt(data, self.aes_key, self.header.aes_metadata_iv)
         else:
             return xxtea.encrypt(data, self.XXTEA_KEY)
     
@@ -773,13 +795,10 @@ class ARK:
 
         if file_info.encrypted or file_info.aes_encrypted:
             if file_info.aes_encrypted:
-                cipher = AES.new(
-                    self.AES_KEY['11.4.0m'], # Temporary fix
-                    AES.MODE_CTR,
-                    nonce = b'',
-                    initial_value = int.from_bytes(metadata.aes_iv, 'big'),
-                )
-                file_data = cipher.decrypt(file_data)
+                if self.aes_key is None:
+                    raise ValueError('Cannot decrypt file data')
+                
+                file_data = self._aes_decrypt(file_data, self.aes_key, metadata.aes_iv)
             else:
                 if self.header.version == 5:
                     print(f'v5 file "{file_info.filename}" encrypted with xxtea', metadata)
@@ -1545,16 +1564,21 @@ class ARKFile(io.BufferedIOBase):
         if self.compressed:
             if self._ark.header.version == 1:
                 result = zlib.compress(result)
-            elif self._ark.header.version in [3,4]:
+            elif self._ark.header.version in [3,4,5]:
                 result = zstandard.compress(result)
             else:
                 raise BadARKFile(f'Unknown file version: {self._ark.header.version}')
         
         metadata.compressed_size = len(result)
 
-        if self.encrypted:
-            result = xxtea.encrypt(result, self._ark.XXTEA_KEY)
-            metadata.encrypted_size = len(result)
+        if self.encrypted or self.aes_encrypted:
+            if self.aes_encrypted:
+                if self._ark.aes_key is None:
+                    raise ValueError('Cannot encrypt file data')
+                result = self._ark._aes_encrypt(result, self._ark.aes_key, metadata.aes_iv)
+            else:
+                result = xxtea.encrypt(result, self._ark.XXTEA_KEY)
+                metadata.encrypted_size = len(result)
         
         return result, metadata
 
@@ -1606,6 +1630,20 @@ class ARKFile(io.BufferedIOBase):
         self._check_open()
         self._check_writable()
         self._info._encrypted = value
+
+    @property
+    def aes_encrypted(self) -> bool:
+        """
+        Whether or not this file is encrypted. Can be modified.
+
+        Returns: bool
+        """
+        return self._info.aes_encrypted
+    @aes_encrypted.setter
+    def aes_encrypted(self, value: bool):
+        self._check_open()
+        self._check_writable()
+        self._info._aes_encrypted = value
     
     @property
     def priority(self) -> int:
