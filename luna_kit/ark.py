@@ -668,6 +668,26 @@ class ARK:
                     
                     self.aes_key = key
                     return result
+                
+                try:
+                    import requests
+
+                    response = requests.get('https://assets.all-the-ponies.com/luna_kit/ark_keys.json')
+                    if response.ok:
+                        remote_keys: dict[str, str] = response.json()
+
+                        for hex_key in remote_keys.values():
+                            key = bytes.fromhex(hex_key)
+                            result = self._aes_decrypt(data, key, self.header.aes_metadata_iv)
+                            if result[:4] != bytes.fromhex('28b52ffd'): # zstd magic
+                                continue
+                            
+                            self.aes_key = key
+                            return result
+                    
+                except ImportError:
+                    pass
+
                 raise ValueError('Cannot decrypt metadata')
             else:
                 result = self._aes_decrypt(data, self.aes_key, self.header.aes_metadata_iv)
