@@ -108,9 +108,9 @@ cli = [
 
   "vxn-py",
   "filetype",
-  # "numpy",
-  # "pygltflib",
-  # "scipy",
+  "numpy",
+  "pygltflib",
+  "scipy",
   
   "requests",
   "furl",
