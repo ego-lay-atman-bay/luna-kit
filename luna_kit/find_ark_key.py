@@ -23,6 +23,8 @@ import struct
 import sys
 import zipfile
 
+from .file_utils import PathOrBinaryFile, open_binary
+
 # The trailing 36 bytes of `ARK_DeriveKey` are identical across game versions.
 # They start right after the two ADRP/ADD address-loading pairs (20 bytes):
 #
@@ -219,13 +221,44 @@ def _find_by_marker(data):
     raise ValueError('could not locate the AES key via the deadbeaf marker')
 
 
-def find_aes_key(binary):
+def find_aes_key(file: PathOrBinaryFile):
     """Recover the ARK AES key from the raw bytes of libMyPonyWorld.so.
 
     Tries the primary method (ARK_DeriveKey signature) first, then falls back
     to the secondary method (deadbeaf marker + XXTEA key landmark).
     """
-    data = bytes(binary)
+
+    ARCHITECTURES = [
+        "arm64-v8a",
+        "armeabi-v7a",
+        "x86",
+        "x86_64",
+    ]
+
+    data = b''
+        
+    with open_binary(file, 'r') as filein:
+        if filein.read(4) == b'PK\x03\x04':
+            filein.seek(0)
+            with zipfile.ZipFile(filein) as zip:
+                lib_info: zipfile.ZipInfo | None = None
+                
+                for arch in ARCHITECTURES:
+                    try:
+                        lib_info = zip.getinfo(f'lib/{arch}/libMyPonyWorld.so')
+                        break
+                    except KeyError:
+                        continue
+                
+                if lib_info is None:
+                    raise FileNotFoundError('Cannot find libMyPonyWorld.so, probably not a lib apk')
+                
+                data = zip.read(lib_info)
+        else:
+            filein.seek(0)
+            data = filein.read()
+
+    
     errors = []
 
     for finder in (_find_by_signature, _find_by_marker):
@@ -239,7 +272,8 @@ def find_aes_key(binary):
 
 def main(argv):
     if len(argv) < 2:
-        sys.stderr.write(__doc__)
+        if __doc__:
+            sys.stderr.write(__doc__)
         return 1
 
     label = len(argv) > 2
