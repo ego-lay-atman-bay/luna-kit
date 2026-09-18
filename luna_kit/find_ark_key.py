@@ -18,9 +18,10 @@ Usage:
     python find_ark_key.py path/to/libMyPonyWorld.so [another.so ...]
 """
 
+from pathlib import Path
 import struct
 import sys
-from pathlib import Path
+import zipfile
 
 # The trailing 36 bytes of `ARK_DeriveKey` are identical across game versions.
 # They start right after the two ADRP/ADD address-loading pairs (20 bytes):
@@ -116,14 +117,14 @@ def _offset_to_va(offset, segments):
     for vaddr, foffset, filesz in segments:
         if foffset <= offset < foffset + filesz:
             return vaddr + (offset - foffset)
-    raise ValueError('file offset 0x%x is not within a loadable segment' % offset)
+    raise ValueError(f'file offset 0x{offset} is not within a loadable segment')
 
 
 def _va_to_offset(va, segments):
     for vaddr, foffset, filesz in segments:
         if vaddr <= va < vaddr + filesz:
             return foffset + (va - vaddr)
-    raise ValueError('virtual address 0x%x is not within a loadable segment' % va)
+    raise ValueError(f'virtual address 0x{va} is not within a loadable segment')
 
 def _xor(a, b):
     return bytes(x ^ y for x, y in zip(a, b))
@@ -247,11 +248,11 @@ def main(argv):
         try:
             key = find_aes_key(Path(path).read_bytes())
         except Exception as e:
-            sys.stderr.write('%s: error: %s\n' % (path, e))
+            sys.stderr.write(f'{path}: error: {e}\n')
             failed = True
             continue
         if label:
-            print('%s: %s' % (path, key.hex()))
+            print(f'{path}: {key.hex()}')
         else:
             print(key.hex())
 
