@@ -1,10 +1,18 @@
+from collections.abc import Mapping
 import csv
 import dataclasses
-import os
-import struct
-from collections.abc import Mapping
 from dataclasses import dataclass
+import os
+from pathlib import Path
+import struct
 from typing import Annotated, BinaryIO, Literal
+
+from .. import enums
+from ..file_utils import PathOrBinaryFile, open_binary
+from ..pvr import PVR
+from ..utils import read_ascii_string, split_list, strToBool, strToFloat, strToInt
+from .anim import Anim
+from .model_common import USHORT_MAX, Vector3
 
 try:
     import dataclasses_struct as dcs
@@ -16,13 +24,7 @@ except ImportError as e:
     e.add_note('model dependencies not found')
     raise e
 
-from .. import enums
-from ..file_utils import PathOrBinaryFile, open_binary
-from ..pvr import PVR
-from ..utils import (read_ascii_string, split_list,
-                     strToBool, strToFloat, strToInt)
-from .anim import Anim
-from .model_common import USHORT_MAX, Vector3
+
 
 
 @dcs.dataclass_struct(size = 'std', byteorder='little')
@@ -98,8 +100,8 @@ class RKModel:
         self.meshes = []
         
         with open_binary(file) as open_file:
-            if isinstance(file, str):
-                self.filename = file
+            if isinstance(file, (str, Path)):
+                self.filename = str(file)
             
             self.header = self._read_header(open_file)
             self.name = read_ascii_string(self.header.name)
@@ -519,7 +521,6 @@ class RKM:
     UseMipmaps: bool = False
     PixelFormat: Literal['888', ''] = ''
     MaterialTemplateType: str = ''
-    Shader: str = ''
     UserVector0_0: float = 0
     
     def __post_init__(self):
