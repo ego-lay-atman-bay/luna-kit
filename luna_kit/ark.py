@@ -1794,3 +1794,4 @@ class ARKMetadataCollection:
     
     def _clear(self):
         self._metadata_list.clear()
+        self._metadata_dict.clear()
