@@ -104,7 +104,7 @@ def get_latest_version() -> str | None:
         futures = [
             threader.submit(check_atp),
             threader.submit(check_gplay),
-            threader.submit(check_apkmirror),
+            # threader.submit(check_apkmirror),
         ]
         versions = [
             version for version in
