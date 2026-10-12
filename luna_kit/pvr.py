@@ -102,7 +102,7 @@ class PVR:
         
         # print(f'alpha: {self.alpha_filename}')
         if self.alpha_filename and not image_has_alpha(self.image):
-            alpha = PVR(self.alpha_filename)
+            alpha = PVR(self.alpha_filename, external_alpha = False)
             if alpha.image.size == self.image.size:
                 # print('Same size')
                 self.image = put_alpha(self.image, alpha.image)
