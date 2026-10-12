@@ -134,6 +134,7 @@ class ARKParser(CLICommand):
         
         from ..ark import ARK
         from ..ark_filename import sort_ark_filenames
+        from ..utils import approximate_size
 
         if args.action == 'list':
             files: list[str] = args.files
@@ -155,6 +156,7 @@ class ARKParser(CLICommand):
 
                         row = [
                             info.filename,
+                            approximate_size(info.size),
                             info.timestamp.strftime('%Y-%m-%d %H:%M:%SZ') if info.timestamp else 'Unknown',
                             '[red]compressed[/red]' if info.compressed  else '[green]uncompressed[/green]',
                             '[red]encrypted[/red]' if info.encrypted or info.aes_encrypted else '[green]unencrypted[/green]',

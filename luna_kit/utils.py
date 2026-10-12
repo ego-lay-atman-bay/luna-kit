@@ -118,3 +118,27 @@ def split_list(array: Iterable, wanted_parts: int = 2):
         array[i*length // wanted_parts: (i+1)*length // wanted_parts]
         for i in range(wanted_parts)
     ]
+
+
+def prettify_float(real: float, precision: int = 2) -> str:
+    if precision < 0:
+        raise ValueError(f'Negative precision {precision} unsupported.')
+
+    result = f'{real:.{precision}f}'.rstrip('0').rstrip('.')
+    return '0' if result == '-0' else result
+
+
+SIZE_UNITS = {1000: ['KB', 'MB', 'GB']}
+
+def approximate_size(size, precision: int = 2):
+    mult = 1000
+    for unit in ['B', 'KB', 'MB']:
+        if size < mult:
+            return f'{prettify_float(size, precision)}{unit}'
+        
+        size = size / mult
+    
+    # GB after loop
+    return f'{prettify_float(size, precision)}GB'
+            
+approximate_size(2123)
