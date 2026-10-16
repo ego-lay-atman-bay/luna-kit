@@ -68,12 +68,15 @@ class Anim:
             self.frames = self._read_frames(open_file)
             self.animations = self._get_animation_list()
         
-    def _read_header(self, file: BinaryIO):
-        header: Header = Header.from_packed(
-            file.read(dcs.get_struct_size(Header))
-        )
-        
-        assert header.magic == self.MAGIC, 'file is not .anim file'
+    def _read_header(self, file: BinaryIO) -> Header:
+        raw = file.read(dcs.get_struct_size(Header))
+        if len(raw) != dcs.get_struct_size(Header):
+            raise ValueError('Truncated ANIM header')
+        header = Header.from_packed(raw)
+        if header.magic != self.MAGIC:
+            raise ValueError('File is not an ANIM animation')
+        if header.frame_type != 4:
+            raise NotImplementedError(f'Unsupported ANIM frame type: {header.frame_type}')
 
         self.name = read_ascii_string(header.name)
         
@@ -107,15 +110,15 @@ class Anim:
         
         return frames
     
-    def _read_bone_transformation(self, file: BinaryIO):
-        pos = struct.unpack(
-            BoneTransformation.POS_FORMAT,
-            file.read(struct.calcsize(BoneTransformation.POS_FORMAT)),
-        )
-        quat = struct.unpack(
-            BoneTransformation.QUAT_FORMAT,
-            file.read(struct.calcsize(BoneTransformation.QUAT_FORMAT)),
-        )
+    def _read_bone_transformation(self, file: BinaryIO) -> BoneTransformation:
+        position_size = struct.calcsize(BoneTransformation.POS_FORMAT)
+        quaternion_size = struct.calcsize(BoneTransformation.QUAT_FORMAT)
+        position = file.read(position_size)
+        quaternion = file.read(quaternion_size)
+        if len(position) != position_size or len(quaternion) != quaternion_size:
+            raise ValueError('Truncated ANIM bone transformation')
+        pos = struct.unpack(BoneTransformation.POS_FORMAT, position)
+        quat = struct.unpack(BoneTransformation.QUAT_FORMAT, quaternion)
         
         return BoneTransformation(
             Vector3(

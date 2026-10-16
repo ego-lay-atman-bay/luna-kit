@@ -8,7 +8,7 @@ import struct
 from typing import Annotated, BinaryIO, Literal
 
 from .. import enums
-from ..file_utils import PathOrBinaryFile, open_binary
+from ..file_utils import PathOrBinaryFile, get_filesize, open_binary
 from ..pvr import PVR
 from ..utils import read_ascii_string, split_list, strToBool, strToFloat, strToInt
 from .anim import Anim
@@ -221,25 +221,47 @@ class RKModel:
         
         return
     
-    def _read_header(self, file: BinaryIO):
-        header: Header = Header.from_packed(
-            file.read(dcs.get_struct_size(Header))
-        )
-        
-        assert header.magic == self.MAGIC, 'file is not .rk file'
+    def _read_header(self, file: BinaryIO) -> Header:
+        raw = file.read(dcs.get_struct_size(Header))
+        if len(raw) != dcs.get_struct_size(Header):
+            raise ValueError('Truncated RK header')
+        header = Header.from_packed(raw)
+        if header.magic != self.MAGIC:
+            raise ValueError('File is not an RK model')
         
         return header
     
-    def _read_sections_header(self, file: BinaryIO):
-        sections: Mapping[enums.rk.Tag, SectionHeader] = {}
+    def _read_sections_header(self, file: BinaryIO) -> dict[int, SectionHeader]:
+        sections: dict[int, SectionHeader] = {}
         size = 24 * 16
-        
-        for tag in struct.iter_unpack(
-            '4I',
-            file.read(size),
-        ):
-            if tag[0]:
-                sections[tag[0]] = SectionHeader(*tag)
+        raw = file.read(size)
+        if len(raw) != size:
+            raise ValueError('Truncated RK section table')
+        file_size = get_filesize(file)
+        minimum_offset = dcs.get_struct_size(Header) + size
+        fixed_strides = {
+            enums.rk.Tag.SUBMESH_INFO: 16, enums.rk.Tag.BONES: 140,
+            enums.rk.Tag.ATTRIBUTES: 4, enums.rk.Tag.SUBMESH_NAMES: 64,
+            enums.rk.Tag.WEIGHTS: 12,
+        }
+        known_tags = set(enums.rk.Tag)
+        for tag, offset, count, byte_length in struct.iter_unpack('<4I', raw):
+            if not tag:
+                continue
+            if tag in sections:
+                raise ValueError(f'Duplicate RK section: {tag}')
+            if byte_length and (offset < minimum_offset or offset + byte_length > file_size):
+                raise ValueError(f'RK section outside file: {tag}')
+            if tag in known_tags:
+                if bool(count) != bool(byte_length) or (count and byte_length % count):
+                    raise ValueError(f'Invalid RK section count or size: {tag}')
+                if count:
+                    stride = byte_length // count
+                    if tag in fixed_strides and stride != fixed_strides[tag]:
+                        raise ValueError(f'Invalid RK record width: {tag}')
+                    if tag == enums.rk.Tag.VERTS and stride < 12:
+                        raise ValueError('RK vertex record is too short for its position')
+            sections[tag] = SectionHeader(tag, offset, count, byte_length)
         
         return sections
 
@@ -284,6 +306,8 @@ class RKModel:
         return materials
 
     def _read_attributes(self, file: BinaryIO):
+        self._uv_offset, self._uv_format = 0, 0
+        self._uv_scale = 1
         attributes_info = self.section_headers.get(enums.rk.Tag.ATTRIBUTES)
         if attributes_info is None:
             return []
@@ -292,14 +316,17 @@ class RKModel:
         
         format_str = 'H2B'
         
-        self._uv_offset, self._uv_format = 0, 0
-        self._uv_scale = 1
         file.seek(attributes_info.offset)
         for x in range(attributes_info.count):
             attribute = struct.unpack(
                 format_str,
                 file.read(struct.calcsize(format_str)),
             )
+            vertices = self.section_headers.get(enums.rk.Tag.VERTS)
+            if attribute[0] in (1026, 1030) and vertices is not None and vertices.count:
+                width = 8 if attribute[0] == 1026 else 4
+                if attribute[1] < 12 or attribute[1] + width > vertices.byte_length // vertices.count:
+                    raise ValueError('RK UV attribute is outside its vertex record')
             if attribute[0] == 1030:
                 self._uv_offset, self._uv_format = attribute[1], 'H'
                 self._uv_scale = 2
@@ -320,6 +347,8 @@ class RKModel:
         submesh_info_info = self.section_headers.get(enums.rk.Tag.SUBMESH_INFO)
         if submesh_info_info is None:
             return []
+        if submesh_names_info.count != submesh_info_info.count:
+            raise ValueError('RK submesh and name counts differ')
         
         submeshes = []
         
@@ -348,7 +377,7 @@ class RKModel:
     def _read_verts(self, file: BinaryIO) -> list[tuple[float,float,float,float]]:
         
         verts_info = self.section_headers.get(enums.rk.Tag.VERTS)
-        if verts_info is None:
+        if verts_info is None or not verts_info.count:
             return []
         
         file.seek(verts_info.offset)
@@ -431,8 +460,10 @@ class RKModel:
 
     def _read_indexes_and_weights(self, file: BinaryIO):
         weight_info = self.section_headers.get(enums.rk.Tag.WEIGHTS)
-        if weight_info is None:
+        if weight_info is None or not weight_info.count:
             return []
+        if weight_info.count != len(self.verts):
+            raise ValueError('RK vertex and weight counts differ')
         
         file.seek(weight_info.offset)
         
@@ -466,7 +497,7 @@ class RKModel:
     
     def _read_meshes(self, file: BinaryIO):
         mesh_info =  self.section_headers.get(enums.rk.Tag.FACES)
-        if mesh_info is None:
+        if mesh_info is None or not mesh_info.count:
             return []
 
         meshes = []
@@ -477,22 +508,29 @@ class RKModel:
         }
         
         stride = mesh_info.byte_length // mesh_info.count
-        assert stride in formats, f'Bad item size {stride} for face section. Expected 2 or 4 bytes.'
+        if stride not in formats:
+            raise ValueError(f'Bad item size {stride} for face section. Expected 2 or 4 bytes.')
 
         triangle_format = formats[stride]
         
-        file.seek(mesh_info.offset)
         for submesh in self.submeshes:
+            if submesh.material >= len(self.materials):
+                raise ValueError('RK submesh material index is out of range')
+            if submesh.offset + submesh.triangles * 3 > mesh_info.count:
+                raise ValueError('RK submesh face range is outside the face section')
             mesh = Mesh(submesh.name)
             meshes.append(mesh)
             mesh.material = self.materials[submesh.material].name
             mesh.material_index = submesh.material
             
-            # file.seek(mesh_info[0] + submesh.offset)
+            # Submesh offsets are face-index counts, not byte offsets.
+            file.seek(mesh_info.offset + submesh.offset * stride)
             for triangle_data in struct.iter_unpack(
                 f'3{triangle_format}',
                 file.read(submesh.triangles * 3 * struct.calcsize(triangle_format)),
             ):
+                if max(triangle_data) >= len(self.verts):
+                    raise ValueError('RK face vertex index is out of range')
                 mesh.triangles.append(Triangle(
                     x = triangle_data[0],
                     y = triangle_data[1],
