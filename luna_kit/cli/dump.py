@@ -218,7 +218,7 @@ class DumpCommand(CLICommand):
                                 console.print(e)
                             else:
                                 raise e
-            except BadARKFile:
+            except (BadARKFile, ValueError):
                 console.print(f'[red]"{ark_filename}" not an ark file[/]')
             except Exception as e:
                 e.add_note(f'ark: {os.path.basename(ark_filename)}')
