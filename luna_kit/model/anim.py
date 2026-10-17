@@ -1,4 +1,5 @@
 import csv
+import math
 import os
 import struct
 from collections.abc import Mapping
@@ -75,7 +76,7 @@ class Anim:
         header = Header.from_packed(raw)
         if header.magic != self.MAGIC:
             raise ValueError('File is not an ANIM animation')
-        if header.frame_type != 4:
+        if header.frame_type not in (0, 1, 4):
             raise NotImplementedError(f'Unsupported ANIM frame type: {header.frame_type}')
 
         self.name = read_ascii_string(header.name)
@@ -111,6 +112,30 @@ class Anim:
         return frames
     
     def _read_bone_transformation(self, file: BinaryIO) -> BoneTransformation:
+        if self.header.frame_type in (0, 1):
+            record_format = '<8f' if self.header.frame_type == 0 else '<4f3h'
+            record_size = struct.calcsize(record_format)
+            record = file.read(record_size)
+            if len(record) != record_size:
+                raise ValueError('Truncated ANIM bone transformation')
+            values = struct.unpack(record_format, record)
+            if not all(math.isfinite(value) for value in values):
+                raise ValueError('Non-finite ANIM bone transformation')
+            if self.header.frame_type == 0:
+                # XYZW rotation followed by XYZ translation and a unit lane.
+                # BoneTransformation cannot represent a non-unit final lane.
+                if values[7] != 1:
+                    raise ValueError('Unsupported non-unit type 0 ANIM transform lane')
+                return BoneTransformation(
+                    Vector3(*values[4:7]),
+                    Quaternion(values[3], *values[:3]),
+                )
+            # XYZ translation and W stay float; only quaternion XYZ is packed.
+            return BoneTransformation(
+                Vector3(*values[:3]),
+                Quaternion(values[3], values[4] / 32767, values[5] / 32767, values[6] / 32767),
+            )
+
         position_size = struct.calcsize(BoneTransformation.POS_FORMAT)
         quaternion_size = struct.calcsize(BoneTransformation.QUAT_FORMAT)
         position = file.read(position_size)
