@@ -1,23 +1,20 @@
 import csv
 import math
 import os
-import struct
-from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Annotated, BinaryIO, Literal
+from pathlib import Path
+from typing import Annotated, BinaryIO
 
 try:
     import dataclasses_struct as dcs
     import numpy
-    # from pyquaternion import Quaternion
+    from numpy.typing import NDArray
 except ImportError as e:
     e.add_note('model dependencies not found')
     raise e
 
-from ..file_utils import PathOrBinaryFile, open_binary
-from ..utils import (increment_name_num, read_ascii_string, strToBool,
-                     strToFloat, strToInt)
-from .. import enums
+from ..file_utils import PathOrBinaryFile, PathOrTextFile, open_binary, open_text_file
+from ..utils import read_ascii_string
 from .model_common import Vector3
 from .mathutils import Quaternion
 
@@ -40,35 +37,93 @@ class Animation:
     fps: float
 
 @dataclass
+class AnimationRow:
+    """One CSV record, including blank/invalid rows; line is its last source line."""
+    line: int
+    fields: list[str]
+    animation: Animation | None = None
+    error: str | None = None
+
+
+def read_animation_csv(file: PathOrTextFile) -> list[AnimationRow]:
+    """Read an explicit path or borrowed text stream without discarding records.
+
+    Frame bounds, positive FPS, duplicate policy and clip selection belong to
+    the caller. Strings are paths; use a text stream for inline CSV content.
+    """
+    source = (open(file, encoding='utf-8-sig', newline='')
+              if isinstance(file, (str, Path)) else open_text_file(file))
+    rows = []
+    with source as handle:
+        reader = csv.reader(handle, strict=True)
+        for fields in reader:
+            row = AnimationRow(reader.line_num, fields)
+            if fields:
+                try:
+                    if len(fields) != 4 or not fields[0]:
+                        raise ValueError('expected name,start,end,fps')
+                    start, end, fps = int(fields[1]), int(fields[2]), float(fields[3])
+                    if not math.isfinite(fps):
+                        raise ValueError('non-finite FPS')
+                    row.animation = Animation(fields[0], start, end, fps)
+                except ValueError as error:
+                    row.error = str(error)
+            rows.append(row)
+    return rows
+
+
+@dataclass
 class BoneTransformation:
     position: Vector3
     quaternion: Quaternion
-    
+
     POS_FORMAT: str = '3h'
     QUAT_FORMAT: str = '1h3b'
 
+
+# Packed native records have no alignment padding. Output preserves Python
+# float precision; quaternion fields follow the existing WXYZ object API.
+_RECORD_DTYPES = {
+    0: numpy.dtype([('quaternion', '<f4', 4), ('position', '<f4', 4)]),
+    1: numpy.dtype([('position', '<f4', 3), ('w', '<f4'), ('xyz', '<i2', 3)]),
+    2: numpy.dtype([('position', '<i2', 3), ('w', '<i2'), ('xyz', '<i2', 3)]),
+    3: numpy.dtype([('position', '<f4', 3), ('w', '<f4'), ('xyz', 'i1', 3)]),
+    4: numpy.dtype([('position', '<i2', 3), ('w', '<i2'), ('xyz', 'i1', 3)]),
+}
+_FRAME_DTYPE = numpy.dtype([('position', numpy.float64, 3), ('quaternion', numpy.float64, 4)])
+_POSITION_SCALE = 0.031250953674316406
+
+
 class Anim:
     MAGIC: bytes = b'RKFORMAT'
-    
-    def __init__(self, file: PathOrBinaryFile | None = None):
+
+    def __init__(self, file: PathOrBinaryFile | None = None, *,
+                 csv_file: PathOrTextFile | None = None, numpy_frames: bool = False):
         self.filename = ''
         self.header = Header()
         self.name = ''
         self.animations: dict[str, Animation] = {}
-        self.frames: list[list[BoneTransformation]] = []
-        
+        self.animation_rows: list[AnimationRow] = []
+        self.numpy_frames = numpy_frames
+        self.frames: list[list[BoneTransformation]] | NDArray[numpy.void] = []
+
         if file is not None:
-            self.read(file)
-        
-    def read(self, file: PathOrBinaryFile):
-        self.filename = ''
-        if isinstance(file, str) and os.path.exists(file):
-            self.filename = os.path.abspath(file)
+            self.read(file, csv_file=csv_file)
+        elif csv_file is not None:
+            raise ValueError('csv_file requires an ANIM input')
+
+    def read(self, file: PathOrBinaryFile, *, csv_file: PathOrTextFile | None = None,
+             numpy_frames: bool | None = None) -> None:
+        if numpy_frames is not None:
+            self.numpy_frames = numpy_frames
+        self.filename = os.path.abspath(file) if isinstance(file, (str, Path)) else ''
+        self.animation_rows = []
+        self.animations = {}
         with open_binary(file) as open_file:
             self.header = self._read_header(open_file)
             self.frames = self._read_frames(open_file)
-            self.animations = self._get_animation_list()
-        
+        self.animations = self._get_animation_list(csv_file)
+
     def _read_header(self, file: BinaryIO) -> Header:
         raw = file.read(dcs.get_struct_size(Header))
         if len(raw) != dcs.get_struct_size(Header):
@@ -76,86 +131,62 @@ class Anim:
         header = Header.from_packed(raw)
         if header.magic != self.MAGIC:
             raise ValueError('File is not an ANIM animation')
-        if header.frame_type not in (0, 1, 4):
+        if header.frame_type not in _RECORD_DTYPES:
             raise NotImplementedError(f'Unsupported ANIM frame type: {header.frame_type}')
 
         self.name = read_ascii_string(header.name)
-        
         return header
-    
-    def _get_animation_list(self):
-        if self.filename:
-            csv_name = os.path.join(os.path.dirname(self.filename), self.name + '.csv')
-            if os.path.isfile(csv_name):
-                with open(csv_name, 'r', newline = '') as csvfile:
-                    reader = csv.DictReader(csvfile, ['name', 'start', 'end', 'fps'])
-                    animation_list = {
-                        row['name']: Animation(
-                            row['name'],
-                            strToInt(row['start']),
-                            strToInt(row['end']),
-                            strToFloat(row['fps']),
-                        ) for row in reader
-                    }
-                
-                return animation_list
+
+    def _get_animation_list(self, csv_file: PathOrTextFile | None = None) -> dict[str, Animation]:
+        if csv_file is None and self.filename:
+            csv_name = Path(self.filename).parent / (self.name + '.csv')
+            if csv_name.is_file():
+                csv_file = csv_name
             else:
-                print(f'could not find {os.path.basename(csv_name)}')
-                
-        return {}
-    
-    def _read_frames(self, file: BinaryIO):
-        frames = []
-        for frame_index in range(self.header.frame_count):
-            frames.append([self._read_bone_transformation(file) for _ in range(self.header.bone_count)])
-        
-        return frames
-    
-    def _read_bone_transformation(self, file: BinaryIO) -> BoneTransformation:
-        if self.header.frame_type in (0, 1):
-            record_format = '<8f' if self.header.frame_type == 0 else '<4f3h'
-            record_size = struct.calcsize(record_format)
-            record = file.read(record_size)
-            if len(record) != record_size:
+                print(f'could not find {csv_name.name}')
+        if csv_file is None:
+            return {}
+        self.animation_rows = read_animation_csv(csv_file)
+        # Convenience view: valid names keep their existing last-value behavior.
+        # Consumers needing duplicate/invalid-row policy use animation_rows.
+        return {row.animation.name: row.animation for row in self.animation_rows
+                if row.animation is not None}
+
+    def _read_frames(self, file: BinaryIO) -> list[list[BoneTransformation]] | NDArray[numpy.void]:
+        kind = self.header.frame_type
+        dtype = _RECORD_DTYPES[kind]
+        shape = (self.header.frame_count, self.header.bone_count)
+        size = shape[0] * shape[1] * dtype.itemsize
+        chunks = []
+        remaining = size
+        while remaining:
+            # Bound each read without imposing a limit on the animation size.
+            chunk = file.read(min(remaining, 8 * 1024 * 1024))
+            if not chunk:
                 raise ValueError('Truncated ANIM bone transformation')
-            values = struct.unpack(record_format, record)
-            if not all(math.isfinite(value) for value in values):
-                raise ValueError('Non-finite ANIM bone transformation')
-            if self.header.frame_type == 0:
-                # XYZW rotation followed by XYZ translation and a unit lane.
-                # BoneTransformation cannot represent a non-unit final lane.
-                if values[7] != 1:
-                    raise ValueError('Unsupported non-unit type 0 ANIM transform lane')
-                return BoneTransformation(
-                    Vector3(*values[4:7]),
-                    Quaternion(values[3], *values[:3]),
-                )
-            # XYZ translation and W stay float; only quaternion XYZ is packed.
-            return BoneTransformation(
-                Vector3(*values[:3]),
-                Quaternion(values[3], values[4] / 32767, values[5] / 32767, values[6] / 32767),
-            )
-
-        position_size = struct.calcsize(BoneTransformation.POS_FORMAT)
-        quaternion_size = struct.calcsize(BoneTransformation.QUAT_FORMAT)
-        position = file.read(position_size)
-        quaternion = file.read(quaternion_size)
-        if len(position) != position_size or len(quaternion) != quaternion_size:
-            raise ValueError('Truncated ANIM bone transformation')
-        pos = struct.unpack(BoneTransformation.POS_FORMAT, position)
-        quat = struct.unpack(BoneTransformation.QUAT_FORMAT, quaternion)
-        
-        return BoneTransformation(
-            Vector3(
-                pos[0] / 32,
-                pos[1] / 32,
-                pos[2] / 32,
-            ),
-            Quaternion(
-                quat[0] / 32767,
-                quat[1] / 127,
-                quat[2] / 127,
-                quat[3] / 127,
-            ),
-        )
-
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        raw = b''.join(chunks)
+        records = numpy.frombuffer(raw, dtype=dtype).reshape(shape)
+        frames = numpy.empty(shape, dtype=_FRAME_DTYPE)
+        position, quaternion = frames['position'], frames['quaternion']
+        if kind == 0:
+            if not numpy.all(records['position'][..., 3] == 1):
+                raise ValueError('Unsupported non-unit type 0 ANIM transform lane')
+            position[:] = records['position'][..., :3]
+            quaternion[:] = records['quaternion'][..., [3, 0, 1, 2]]
+        else:
+            position[:] = records['position']
+            quaternion[..., 0] = records['w']
+            quaternion[..., 1:] = records['xyz']
+            if kind in (2, 4):
+                position *= _POSITION_SCALE
+                quaternion[..., 0] /= 32767
+            quaternion[..., 1:] /= 32767 if kind in (1, 2) else 127
+        if not numpy.isfinite(position).all() or not numpy.isfinite(quaternion).all():
+            raise ValueError('Non-finite ANIM bone transformation')
+        if self.numpy_frames:
+            return frames
+        return [[BoneTransformation(Vector3(*position), Quaternion(*quaternion))
+                 for position, quaternion in zip(frame['position'].tolist(), frame['quaternion'].tolist())]
+                for frame in frames]

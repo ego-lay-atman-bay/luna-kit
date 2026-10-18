@@ -218,6 +218,39 @@ If you are writing a script that uses luna kit, it is important to know all the 
 
 The main reason the dependencies are split up like this, is to reduce bundle size if you are just using one thing. For example, if you're just writing a script to read `.rk` files, you don't need any networking stuff that's needed for `download`. You especially don't need the massive `rich` library if you're not using the cli.
 
+### Reading ANIM frames and CSV clips
+
+`Anim` reads frame types 0–4. Packed positions in types 2 and 4 use the
+native scale `0.031250953674316406`. Quaternions are returned without normalization.
+
+```python
+from luna_kit.model import Anim
+
+animation = Anim("character.anim", csv_file="character.csv", numpy_frames=True)
+positions = animation.frames["position"]      # (frames, bones, 3), XYZ
+quaternions = animation.frames["quaternion"]  # (frames, bones, 4), WXYZ
+```
+
+`numpy_frames=True` returns a structured NumPy array with float64 fields,
+avoiding one Python object per bone transformation. By default, `frames`
+remains a list of frame lists containing `BoneTransformation` objects.
+`read()` keeps the selected mode unless `numpy_frames` is passed again.
+
+Without `csv_file`, file inputs look for `<embedded animation name>.csv`
+beside the ANIM. An explicit CSV path or text stream overrides that lookup;
+a missing explicit path raises an error. Binary and text streams remain open.
+
+`animation_rows` preserves CSV record order and decoded fields, including blank
+rows and duplicate names. Each row provides its ending source `line`, parsed
+`animation` or `None`, and any numeric/column `error`. CSV syntax errors raise
+`csv.Error`. `animations` remains a convenience dictionary of valid rows;
+for duplicate names, the last valid row wins. Invalid numeric values are
+recorded as errors instead of being replaced with zero.
+
+CSV-only readers can use `read_animation_csv` from `luna_kit.model.anim`.
+Frame-range validation, positive-FPS requirements, duplicate-name policy and
+clip selection remain the caller's responsibility.
+
 # Converting audio
 
 The audio files are stored in `mpc` files. They can be converted to `wav` using ffmpeg, however the quality is not very good. To get the best quality conversion, use the official Musepack `mpcdec` command line utility, which is actually what the game uses. It can be downloaded at https://www.musepack.net/.
