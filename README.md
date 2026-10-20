@@ -226,15 +226,21 @@ native scale `0.031250953674316406`. Quaternions are returned without normalizat
 ```python
 from luna_kit.model import Anim
 
-animation = Anim("character.anim", csv_file="character.csv", numpy_frames=True)
-positions = animation.frames["position"]      # (frames, bones, 3), XYZ
-quaternions = animation.frames["quaternion"]  # (frames, bones, 4), WXYZ
+animation = Anim("character.anim", csv_file="character.csv")
+positions = animation.raw_frames["position"]      # (frames, bones, 3), XYZ
+quaternions = animation.raw_frames["quaternion"]  # (frames, bones, 4), WXYZ
+object_frames = animation.get_frames()
 ```
 
-`numpy_frames=True` returns a structured NumPy array with float64 fields,
-avoiding one Python object per bone transformation. By default, `frames`
-remains a list of frame lists containing `BoneTransformation` objects.
-`read()` keeps the selected mode unless `numpy_frames` is passed again.
+`raw_frames` always holds the decoded structured NumPy array with float64
+fields and shape `(frame_count, bone_count)`. It is not the packed file data.
+`get_frames()` builds a new list of frame lists containing `BoneTransformation`
+objects from the current array on each call. Use the array directly for bulk
+processing to avoid allocating those Python objects.
+
+This replaces the former `frames` property and `numpy_frames` flag: use
+`raw_frames` for arrays or `get_frames()` for objects. `read()` replaces the
+array; an empty `Anim()` starts with shape `(0, 0)`.
 
 Without `csv_file`, file inputs look for `<embedded animation name>.csv`
 beside the ANIM. An explicit CSV path or text stream overrides that lookup;

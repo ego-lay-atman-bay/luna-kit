@@ -98,30 +98,26 @@ class Anim:
     MAGIC: bytes = b'RKFORMAT'
 
     def __init__(self, file: PathOrBinaryFile | None = None, *,
-                 csv_file: PathOrTextFile | None = None, numpy_frames: bool = False):
+                 csv_file: PathOrTextFile | None = None):
         self.filename = ''
         self.header = Header()
         self.name = ''
         self.animations: dict[str, Animation] = {}
         self.animation_rows: list[AnimationRow] = []
-        self.numpy_frames = numpy_frames
-        self.frames: list[list[BoneTransformation]] | NDArray[numpy.void] = []
+        self.raw_frames: NDArray[numpy.void] = numpy.empty((0, 0), dtype=_FRAME_DTYPE)
 
         if file is not None:
             self.read(file, csv_file=csv_file)
         elif csv_file is not None:
             raise ValueError('csv_file requires an ANIM input')
 
-    def read(self, file: PathOrBinaryFile, *, csv_file: PathOrTextFile | None = None,
-             numpy_frames: bool | None = None) -> None:
-        if numpy_frames is not None:
-            self.numpy_frames = numpy_frames
+    def read(self, file: PathOrBinaryFile, *, csv_file: PathOrTextFile | None = None) -> None:
         self.filename = os.path.abspath(file) if isinstance(file, (str, Path)) else ''
         self.animation_rows = []
         self.animations = {}
         with open_binary(file) as open_file:
             self.header = self._read_header(open_file)
-            self.frames = self._read_frames(open_file)
+            self.raw_frames = self._read_frames(open_file)
         self.animations = self._get_animation_list(csv_file)
 
     def _read_header(self, file: BinaryIO) -> Header:
@@ -152,7 +148,7 @@ class Anim:
         return {row.animation.name: row.animation for row in self.animation_rows
                 if row.animation is not None}
 
-    def _read_frames(self, file: BinaryIO) -> list[list[BoneTransformation]] | NDArray[numpy.void]:
+    def _read_frames(self, file: BinaryIO) -> NDArray[numpy.void]:
         kind = self.header.frame_type
         dtype = _RECORD_DTYPES[kind]
         shape = (self.header.frame_count, self.header.bone_count)
@@ -185,8 +181,10 @@ class Anim:
             quaternion[..., 1:] /= 32767 if kind in (1, 2) else 127
         if not numpy.isfinite(position).all() or not numpy.isfinite(quaternion).all():
             raise ValueError('Non-finite ANIM bone transformation')
-        if self.numpy_frames:
-            return frames
+        return frames
+
+    def get_frames(self) -> list[list[BoneTransformation]]:
+        """Build Python transformation objects from the current decoded array."""
         return [[BoneTransformation(Vector3(*position), Quaternion(*quaternion))
                  for position, quaternion in zip(frame['position'].tolist(), frame['quaternion'].tolist())]
-                for frame in frames]
+                for frame in self.raw_frames]

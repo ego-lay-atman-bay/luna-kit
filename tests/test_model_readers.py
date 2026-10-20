@@ -134,7 +134,7 @@ class ModelReaderTests(unittest.TestCase):
 
 class AnimationReaderTests(unittest.TestCase):
     def test_type4_uses_native_position_scale(self):
-        pose = Anim(animation_bytes()).frames[0][0]
+        pose = Anim(animation_bytes()).get_frames()[0][0]
         self.assertEqual((pose.position.x, pose.position.y, pose.position.z),
                          (1.000030517578125, -2.00006103515625, 3.000091552734375))
         self.assertEqual((pose.quaternion.w, pose.quaternion.x, pose.quaternion.y, pose.quaternion.z), (1, 0, 0, 0))
@@ -152,13 +152,14 @@ class AnimationReaderTests(unittest.TestCase):
                     first_quaternion = (-.25, 1, -32768 / 32767, 16384 / 32767)
                 animation = Anim(animation_bytes(kind, bones=2, frames=2,
                                                  records=first + second + second + first))
-                self.assertEqual([len(frame) for frame in animation.frames], [2, 2])
+                frames = animation.get_frames()
+                self.assertEqual([len(frame) for frame in frames], [2, 2])
                 for frame, bone in ((0, 0), (1, 1)):
-                    pose = animation.frames[frame][bone]
+                    pose = frames[frame][bone]
                     self.assertEqual((pose.position.x, pose.position.y, pose.position.z), (-32.75, .5, 1200.125))
                     self.assertEqual((pose.quaternion.w, pose.quaternion.x, pose.quaternion.y, pose.quaternion.z), first_quaternion)
                 for frame, bone in ((0, 1), (1, 0)):
-                    pose = animation.frames[frame][bone]
+                    pose = frames[frame][bone]
                     self.assertEqual((pose.position.x, pose.position.y, pose.position.z), (5, -9, 1))
                     self.assertEqual((pose.quaternion.w, pose.quaternion.x, pose.quaternion.y, pose.quaternion.z), (0, 0, 1, 0))
 
@@ -181,20 +182,22 @@ class AnimationReaderTests(unittest.TestCase):
                     yz = (-.5, 1200.125)
                     quaternion = (-.25, 1, -128 / 127, 64 / 127)
                 animation = Anim(animation_bytes(kind, bones=2, frames=3, records=records))
-                self.assertEqual([len(frame) for frame in animation.frames], [2, 2, 2])
+                frames = animation.get_frames()
+                self.assertEqual([len(frame) for frame in frames], [2, 2, 2])
                 for index, x in enumerate(xs):
-                    pose = animation.frames[index // 2][index % 2]
+                    pose = frames[index // 2][index % 2]
                     self.assertEqual((pose.position.x, pose.position.y, pose.position.z), (x, *yz))
                     self.assertEqual((pose.quaternion.w, pose.quaternion.x,
                                       pose.quaternion.y, pose.quaternion.z), quaternion)
 
-    def test_numpy_frames_match_object_frames_and_preserve_stream_boundaries(self):
+    def test_raw_frames_match_object_frames_and_preserve_stream_boundaries(self):
         for kind in range(5):
             with self.subTest(kind=kind):
                 data = animation_bytes(kind, bones=2, frames=3)
-                objects = Anim(data).frames
                 stream = io.BytesIO(data + b'trailer')
-                arrays = Anim(stream, numpy_frames=True).frames
+                animation = Anim(stream)
+                arrays = animation.raw_frames
+                objects = animation.get_frames()
                 self.assertEqual(arrays.shape, (3, 2))
                 self.assertEqual(arrays.dtype.names, ('position', 'quaternion'))
                 for frame in range(3):
@@ -208,12 +211,10 @@ class AnimationReaderTests(unittest.TestCase):
                                           pose.quaternion.y, pose.quaternion.z))
                 self.assertEqual(stream.read(), b'trailer')
                 self.assertFalse(stream.closed)
-                self.assertEqual(Anim(animation_bytes(kind, bones=0, frames=3),
-                                      numpy_frames=True).frames.shape, (3, 0))
-                self.assertEqual(Anim(animation_bytes(kind, frames=0),
-                                      numpy_frames=True).frames.shape, (0, 1))
+                self.assertEqual(Anim(animation_bytes(kind, bones=0, frames=3)).raw_frames.shape, (3, 0))
+                self.assertEqual(Anim(animation_bytes(kind, frames=0)).raw_frames.shape, (0, 1))
                 with self.assertRaises(ValueError):
-                    Anim(data[:-1], numpy_frames=True)
+                    Anim(data[:-1])
 
     def test_csv_rows_keep_blank_invalid_and_duplicate_records(self):
         from luna_kit.model.anim import read_animation_csv
@@ -238,7 +239,7 @@ class AnimationReaderTests(unittest.TestCase):
             (root / 'Synthetic.csv').write_text('wrong,0,1,30\n')
             explicit = root / 'selected.csv'
             explicit.write_text('\ufeff\nright,0,1,12.5\nright,1,1,24\nbad,0.5,1,30\n')
-            animation = Anim(model, csv_file=explicit, numpy_frames=True)
+            animation = Anim(model, csv_file=explicit)
             self.assertEqual(list(animation.animations), ['right'])
             self.assertEqual(animation.animations['right'].fps, 24)
             self.assertEqual(len(animation.animation_rows), 4)
@@ -249,9 +250,9 @@ class AnimationReaderTests(unittest.TestCase):
                 Anim(model, csv_file=root/'missing.csv')
             animation.read(model.read_bytes(), csv_file=io.StringIO('stream,0,1,30\n'))
             self.assertEqual(list(animation.animations), ['stream'])
-            self.assertEqual(animation.frames.shape, (2, 1))
-            animation.read(model.read_bytes(), numpy_frames=False)
-            self.assertIsInstance(animation.frames, list)
+            self.assertEqual(animation.raw_frames.shape, (2, 1))
+            animation.read(model.read_bytes())
+            self.assertIsInstance(animation.get_frames(), list)
             self.assertEqual(animation.animation_rows, [])
             self.assertEqual(animation.animations, {})
 
@@ -259,7 +260,7 @@ class AnimationReaderTests(unittest.TestCase):
         for kind in (0, 1, 2, 3, 4):
             for bones, frames in ((0, 1), (1, 0)):
                 with self.subTest(kind=kind, bones=bones, frames=frames):
-                    self.assertEqual(Anim(animation_bytes(kind, bones, frames)).frames,
+                    self.assertEqual(Anim(animation_bytes(kind, bones, frames)).get_frames(),
                                      [[]] if frames else [])
 
     def test_other_frame_types_are_not_decoded_as_type4(self):
@@ -317,11 +318,11 @@ class AnimationReaderTests(unittest.TestCase):
             with self.subTest(kind=kind):
                 source = io.BytesIO(b'prefix' + animation_bytes(kind) + b'trailer')
                 source.seek(6)
-                self.assertEqual(len(Anim(source).frames), 1)
+                self.assertEqual(len(Anim(source).raw_frames), 1)
                 self.assertEqual(source.read(), b'trailer')
                 self.assertFalse(source.closed)
                 source = NonSeekable(animation_bytes(kind, bones=10, frames=10) + b'trailer')
-                self.assertEqual(len(Anim(source).frames), 10)
+                self.assertEqual(len(Anim(source).raw_frames), 10)
                 self.assertEqual(source.read(), b'trailer')
                 with self.assertRaises(ValueError):
                     Anim(NonSeekable(animation_bytes(kind)[:-1]))
