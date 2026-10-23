@@ -115,10 +115,11 @@ class DownloadCommand(CLICommand):
         import json
         
         if not args.astc_manifest and not args.dlc_manifest:
-            if args.platform == 'android':
-                args.astc_manifest = True
-            elif args.platform == 'ios':
-                args.dlc_manifest = True
+            args.dlc_manifest = True
+            # if args.platform == 'android':
+            #     args.astc_manifest = True
+            # elif args.platform == 'ios':
+            #     args.dlc_manifest = True
         
         file_types = {
             'ark': 'ark',
@@ -151,10 +152,7 @@ class DownloadCommand(CLICommand):
             console.print('[red]Could not find version[/]')
             return
         
-        api = API(
-            args.platform,
-            version,
-        )
+        api = API(args.platform, version)
         
         downloaded = []
         output: str = os.path.abspath(args.output.format(version = version))
