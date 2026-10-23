@@ -165,7 +165,7 @@ class DumpCommand(CLICommand):
                     files |= {file[1] for file in new_files}
             return files
 
-        base_output = args.output
+        base_output = os.path.expanduser(args.output)
 
         filenames: list[str] = args.files
         arks: list[str] = []

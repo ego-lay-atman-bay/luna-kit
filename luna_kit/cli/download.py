@@ -155,8 +155,7 @@ class DownloadCommand(CLICommand):
         api = API(args.platform, version)
         
         downloaded = []
-        output: str = os.path.abspath(args.output.format(version = version))
-        output = output
+        output: str = os.path.abspath(os.path.expanduser(args.output).format(version = version))
 
         def download_files(manifest: DLCManifest):
             for file in manifest.get('dlc_items', []):

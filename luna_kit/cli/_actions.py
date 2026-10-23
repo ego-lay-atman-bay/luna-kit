@@ -1,7 +1,8 @@
 import argparse
+from argparse import Action
 import glob
 import logging
-from argparse import Action
+import os
 from typing import Any
 
 
@@ -23,7 +24,7 @@ class GlobFiles(Action):
         
         for value in values:
             result.extend(glob.glob(
-                value,
+                os.path.expanduser(value),
                 recursive = True,
                 include_hidden = True,
             ))

@@ -55,7 +55,7 @@ class LOCCommand(CLICommand):
         for file in args.files:
             output: str = f'{{name}}.{args.format}'
             if args.output:
-                output = args.output
+                output = os.path.expanduser(args.output)
             
             output = output.format(name = os.path.splitext(os.path.basename(file))[0])
             

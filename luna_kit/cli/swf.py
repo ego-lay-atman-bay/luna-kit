@@ -36,7 +36,7 @@ class SwfCommand(CLICommand):
         import shutil
         import os
         
-        ffdec: str | None = args.ffdec
+        ffdec: str | None = os.path.expanduser(args.ffdec) if args.ffdec is not None else None
 
         if ffdec is None:
             ffdec = shutil.which('ffdec')
@@ -45,8 +45,8 @@ class SwfCommand(CLICommand):
                 return
 
         command: str = args.swf_command
-        input: str = args.input
-        output: str | None = args.output
+        input: str = os.path.expanduser(args.input)
+        output: str | None = os.path.expanduser(args.output) if args.output is not None else None
 
         if command == 'fix':
             if output is None:

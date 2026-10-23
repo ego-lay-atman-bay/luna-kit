@@ -207,7 +207,7 @@ class ARKParser(CLICommand):
             else:
                 base_output: str = args.output
             
-            base_output = os.path.abspath(base_output)
+            base_output = os.path.abspath(os.path.expanduser(base_output))
 
             for ark_filename in arks:
                 output = base_output.format(name = os.path.splitext(os.path.basename(ark_filename)))
@@ -249,7 +249,7 @@ class ARKParser(CLICommand):
                     e.add_note(f'ark: {os.path.basename(ark_filename)}')
                     raise e
         elif args.action in ['add', 'create']:
-            output: str = os.path.abspath(args.output)
+            output: str = os.path.abspath(os.path.expanduser(args.output))
             os.makedirs(os.path.dirname(output), exist_ok = True)
 
             mode = 'a' if args.action == 'add' else 'w'
@@ -262,7 +262,9 @@ class ARKParser(CLICommand):
                 arcname = None
                 if '=' in filename:
                     filename, arcname = filename.rsplit('=', 1)
-                
+
+                filename = os.path.expanduser(filename)
+
                 if os.path.isfile(filename):
                     if arcname is None:
                         arcname = os.path.basename(filename)

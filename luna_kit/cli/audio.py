@@ -42,6 +42,7 @@ class AudioCommand(CLICommand):
             console.print('[red]No files found[/]')
             return
         
+        output_dir = os.path.expanduser(args.output)
         for filename in args.files:
             audio = Audio(filename)
             name = os.path.splitext(os.path.basename(filename))[0]
@@ -50,12 +51,12 @@ class AudioCommand(CLICommand):
             
             if isinstance(audio, list):
                 for i, stream in enumerate(audio):
-                    output = os.path.join(args.output, name, f'{name}_{i}.{args.format}')
+                    output = os.path.join(output_dir, name, f'{name}_{i}.{args.format}')
                     output = os.path.abspath(output)
                     os.makedirs(os.path.dirname(output), exist_ok = True)
                     stream.save(output)
             else:
-                output = os.path.join(args.output, f'{name}.{args.format}')
+                output = os.path.join(output_dir, f'{name}.{args.format}')
                 output = os.path.abspath(output)
                 os.makedirs(os.path.dirname(output), exist_ok = True)
                 audio.save(output)

@@ -72,6 +72,9 @@ class PVRCommand(CLICommand):
             console.print(f'reading [yellow]{file}[/]')
             pvr = PVR(file, external_alpha = not args.no_alpha)
             output = args.output
+            if output:
+                output = os.path.expanduser(output)
+            output_template = output
             name = os.path.splitext(os.path.basename(file))[0]
             dir = os.path.dirname(file)
             if output:
@@ -80,7 +83,7 @@ class PVRCommand(CLICommand):
                     name = name,
                     dir = dir,
                 )
-                if output == args.output:
+                if output == output_template:
                     if len(args.files) > 1:
                         output = os.path.join(output, name + '.{format}')
                         if args.format is None:

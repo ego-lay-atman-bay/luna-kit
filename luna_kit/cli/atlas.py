@@ -55,6 +55,8 @@ class AtlasCommand(CLICommand):
         
         
         search_folders: list[str] = args.search_folders
+        if search_folders:
+            search_folders = [os.path.expanduser(folder) for folder in search_folders]
         if search_folders and len(search_folders) == 0:
             search_folders.append('.')
         
@@ -78,7 +80,7 @@ class AtlasCommand(CLICommand):
                 if not args.output:
                     dir = image.dir
                 else:
-                    dir = args.output
+                    dir = os.path.expanduser(args.output)
                 
                 filename = os.path.join(dir, image.filename)
                 os.makedirs(os.path.dirname(filename), exist_ok = True)

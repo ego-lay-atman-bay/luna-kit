@@ -36,7 +36,7 @@ class XMLCommand(CLICommand):
         files = []
         
         for file in args.file:
-            files.extend(glob.glob(file, recursive = True))
+            files.extend(glob.glob(os.path.expanduser(file), recursive = True))
         
         for file in files:
             console.print(f'Formatting [yellow]{file}[/yellow]')

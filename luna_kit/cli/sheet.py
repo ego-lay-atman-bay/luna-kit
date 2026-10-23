@@ -81,13 +81,13 @@ class SheetCommand(CLICommand):
         from itertools import zip_longest
         
         object_data = GameObjectData(
-            args.game_object_data,
-            shopdata = args.shop_data,
+            os.path.expanduser(args.game_object_data),
+            shopdata = os.path.expanduser(args.shop_data) if args.shop_data else None,
         )
         strings = {}
         
         if args.loc:
-            strings = LOC(args.loc).strings
+            strings = LOC(os.path.expanduser(args.loc)).strings
         
         def translate(string: str):
             return strings.get(string, string)
@@ -167,15 +167,16 @@ class SheetCommand(CLICommand):
             sheet.append(object_info)
                         
             
-        os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok = True)
+        output = os.path.expanduser(args.output)
+        os.makedirs(os.path.dirname(os.path.abspath(output)), exist_ok = True)
         
         match args.format:
             case 'csv':
                 import csv
-                with open(args.output, 'w', newline = '', encoding = 'utf-8') as file:
+                with open(output, 'w', newline = '', encoding = 'utf-8') as file:
                     writer = csv.DictWriter(file, sheet[0].keys())
                     writer.writeheader()
                     writer.writerows(sheet)
             case _: # json
-                with open(args.output, 'w', encoding = 'utf-8') as file:
+                with open(output, 'w', encoding = 'utf-8') as file:
                     json.dump(sheet, file, indent = 2, ensure_ascii = False)
