@@ -685,8 +685,8 @@ class ARK:
                             self.aes_key = key
                             return result
                     
-                except ImportError:
-                    pass
+                except ImportError as exc:
+                    raise ValueError("Cannot decrypt metadata") from exc
 
                 raise ValueError('Cannot decrypt metadata')
             else:
