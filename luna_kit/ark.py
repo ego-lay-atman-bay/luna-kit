@@ -673,6 +673,7 @@ class ARK:
                     import requests
 
                     response = requests.get('https://assets.all-the-ponies.com/luna_kit/ark_keys.json')
+                    response.raise_for_status()
                     if response.ok:
                         remote_keys: dict[str, str] = response.json()
 
