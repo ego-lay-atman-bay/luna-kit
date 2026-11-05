@@ -495,6 +495,7 @@ class ARK:
         '11.4.0m': bytes.fromhex('d38ef7a3509ef6784f8e487fc4b10c2a83ea96430ef16f73b92ff4cbf97f0abe'),
     }
     aes_key: bytes | None = None
+    _aes_keys: list[bytes]
     _decompressor = zstandard.ZstdDecompressor()
 
     __file_ctx: nullcontext | BinaryIO | None
@@ -510,7 +511,7 @@ class ARK:
         self,
         file: PathOrBinaryFile,
         mode: Literal['r', 'w', 'a'] = 'r',
-        aes_key: bytes | None = None,
+        aes_key: bytes | Iterable[bytes] | None = None,
         *,
         debug: bool = False,
     ):
@@ -596,9 +597,16 @@ class ARK:
         self._info_collection = {}
         self.__file_buffer = {}
         self.__removed_files = []
+        self._aes_keys = []
 
         if isinstance(aes_key, bytes):
             self.aes_key = aes_key
+            self._aes_keys = [aes_key]
+        elif aes_key is not None:
+            for key in aes_key:
+                if not isinstance(key, bytes):
+                    raise ValueError(f"aes key must by bytes: {key}")
+        
 
         match mode:
             case 'w':
@@ -661,7 +669,9 @@ class ARK:
         """Decrypt metadata bytes based on ARK version."""
         if self.header.version == 5:
             if self.aes_key is None:
-                for key in self.AES_KEYS.values():
+                keys = self._aes_keys if len(self._aes_keys) else reversed(self.AES_KEYS.values())
+                
+                for key in keys:
                     result = self._aes_decrypt(data, key, self.header.aes_metadata_iv)
                     if result[:4] != bytes.fromhex('28b52ffd'): # zstd magic
                         continue
