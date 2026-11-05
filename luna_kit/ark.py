@@ -606,6 +606,7 @@ class ARK:
             for key in aes_key:
                 if not isinstance(key, bytes):
                     raise ValueError(f"aes key must by bytes: {key}")
+                self._aes_keys.append(key)
         
 
         match mode:
