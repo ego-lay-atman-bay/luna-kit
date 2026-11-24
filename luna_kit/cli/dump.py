@@ -24,6 +24,14 @@ class DumpCommand(CLICommand):
         )
 
         parser.add_argument(
+            '-k', '--key', '--keys',
+            help = 'Provide extra aes keys as hex strings to test against',
+            dest = 'aes_keys',
+            nargs = '+',
+            default = [],
+        )
+
+        parser.add_argument(
             '-i', '--ignore-errors',
             dest = 'ignore_errors',
             action = 'store_true',
@@ -188,6 +196,8 @@ class DumpCommand(CLICommand):
             console.print_exception()
             console.print('[red]Could not sort files[/]')
             arks.sort()
+        
+        aes_keys: list[bytes] = [bytes.fromhex(key) for key in args.aes_keys]
 
         extracted_folders = set()
 
@@ -202,7 +212,7 @@ class DumpCommand(CLICommand):
             ))
             extracted_folders.add(folder)
             try:
-                with ARK(ark_filename) as ark:
+                with ARK(ark_filename, aes_key = aes_keys) as ark:
                     for file_metadata in track(
                         ark.infolist(),
                         description = os.path.basename(ark_filename),

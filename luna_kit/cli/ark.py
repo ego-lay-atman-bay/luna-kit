@@ -95,6 +95,14 @@ class ARKParser(CLICommand):
             help = "Always extract",
         )
 
+        for action in [list_, extract]:
+            action.add_argument(
+                '-k', '--key', '--keys',
+                help = 'Provide extra aes keys as hex strings to test against',
+                dest = 'aes_keys',
+                nargs = '+',
+            )
+
         create = subcommand.add_parser(
             'create',
             help = 'Create an ark file',
@@ -138,13 +146,14 @@ class ARKParser(CLICommand):
 
         if args.action == 'list':
             files: list[str] = args.files
+            aes_keys: list[bytes] = [bytes.fromhex(key) for key in args.aes_keys]
             summary: dict[str, dict[Literal['files', 'errors'], int]] = {}
             
             for filename in files:
                 ark_name_printed = False
 
 
-                with ARK(filename) as ark:
+                with ARK(filename, aes_key = aes_keys) as ark:
                     for info in ark.infolist():
                         if isinstance(args.filter, list) and not any(fnmatch.fnmatch(info.filename, pattern) for pattern in args.filter):
                             continue
@@ -191,6 +200,7 @@ class ARKParser(CLICommand):
         
         elif args.action == 'extract':
             arks: list[str] = args.files
+            aes_keys: list[bytes] = [bytes.fromhex(key) for key in args.aes_keys]
             if len(arks) == 0:
                 console.print('[red]No ark files found[/]')
                 return
@@ -213,7 +223,7 @@ class ARKParser(CLICommand):
                 output = base_output.format(name = os.path.splitext(os.path.basename(ark_filename)))
                 errors: int = 0
                 try:
-                    with ARK(ark_filename) as ark:
+                    with ARK(ark_filename, aes_key = aes_keys) as ark:
                         console.print(f'Extracting [yellow]{os.path.basename(ark_filename)}[/]')
                         for filename in track(
                             ark.namelist(),
